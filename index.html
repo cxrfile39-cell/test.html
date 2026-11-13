@@ -54,7 +54,8 @@ tr.cur td{background:var(--acc2)}
 .src.lit{background:#dff3e8;color:#1e7a4f}
 .src.mix{background:#fdf0d6;color:#9a6408}
 .src.asm{background:#eceef1;color:#59616c}
-@media (prefers-color-scheme:dark){.src.lit{background:#173a2a;color:#7fd8a8}.src.mix{background:#3d3018;color:#f0c46a}.src.asm{background:#2a3038;color:#aab3be}}
+.src.inh{background:#e3ecfb;color:#2a5aa8}
+@media (prefers-color-scheme:dark){.src.inh{background:#1c2a44;color:#9dbbf0}.src.lit{background:#173a2a;color:#7fd8a8}.src.mix{background:#3d3018;color:#f0c46a}.src.asm{background:#2a3038;color:#aab3be}}
 .risk{border-radius:10px;padding:10px 12px;margin-top:12px;font-size:14px;border:2px solid var(--line)}
 .risk .rh{font-weight:700;font-size:15px;margin-bottom:2px}
 .risk.hit{border-color:var(--g1);background:color-mix(in srgb,var(--g1) 9%,var(--card))}
@@ -187,6 +188,7 @@ del{color:var(--mute)}
         <label>心率變異 max−min<input name="hrv" type="number" inputmode="numeric" placeholder="選填"></label>
       </div>
       <label class="chk"><input type="checkbox" name="arr"> 心律不整（AF、頻繁 PVC 等）</label>
+      <label class="chk"><input type="checkbox" name="cs"> 鈣化分數過多或有 STENT</label>
       <div class="sec">對比劑注射</div>
       <div class="row3">
         <label>Contrast volume (mL)<input name="vol" type="number" step="1" inputmode="decimal"></label>
@@ -211,7 +213,7 @@ del{color:var(--mute)}
         </label>
         <label>管電壓 kVp
           <select name="kvp">
-            <option value="auto" selected>自動（依 BMI / 體重）</option>
+            <option value="auto" selected>自動（依院內表 / 指引）</option>
             <option>70</option><option>80</option><option>90</option>
             <option>100</option><option>120</option><option>140</option>
           </select>
@@ -309,8 +311,8 @@ del{color:var(--mute)}
   </div>
   <div class="card" style="margin-top:14px">
     <h2>批次匯入 CSV</h2>
-    <p class="hint">第一列為欄位名稱，欄位：<code>id,req,height,weight,age,sex,hr,hrv,arrhythmia,protocol,kvp,conc,volume,rate,ao_hu,lm_hu,noise,actual_grade</code><br>
-    protocol 可填 prospective / retrospective / highpitch / wide；arrhythmia 填 1 或 0；conc 為 mgI/mL（空白視為 370）、volume 為 mL、rate 為 mL/s；age、sex（M/F 或 男/女）、hrv、noise、actual_grade 可留空（actual_grade 請用 4 = 最佳、1 = 無法診斷）；protocol、kvp 留空則自動建議；ao_hu / lm_hu 留空時需有 rate。</p>
+    <p class="hint">第一列為欄位名稱，欄位：<code>id,req,height,weight,age,sex,hr,hrv,arrhythmia,calc_stent,protocol,kvp,conc,volume,rate,ao_hu,lm_hu,noise,actual_grade</code><br>
+    protocol 可填 prospective / retrospective / highpitch / wide；arrhythmia、calc_stent（鈣化過多或有 STENT）填 1 或 0；conc 為 mgI/mL（空白視為 370）、volume 為 mL、rate 為 mL/s；age、sex（M/F 或 男/女）、hrv、noise、actual_grade 可留空（actual_grade 請用 4 = 最佳、1 = 無法診斷）；protocol、kvp 留空則自動建議；ao_hu / lm_hu 留空時需有 rate。</p>
     <label class="drop" id="drop">
       <input type="file" id="file" accept=".csv,text/csv,.txt" multiple>
       <b>點此選擇 CSV 檔（可多選）</b>
@@ -318,7 +320,7 @@ del{color:var(--mute)}
     </label>
     <div id="impres"></div>
     <p class="hint" style="margin-top:10px">或直接貼上 CSV 內容：</p>
-    <textarea id="csvin" placeholder="id,req,height,weight,age,sex,hr,hrv,arrhythmia,protocol,kvp,conc,volume,rate,ao_hu,lm_hu,noise,actual_grade&#10;A001,R123,165,70,62,F,58,4,0,prospective,100,370,60,5,420,395,24,4"></textarea>
+    <textarea id="csvin" placeholder="id,req,height,weight,age,sex,hr,hrv,arrhythmia,calc_stent,protocol,kvp,conc,volume,rate,ao_hu,lm_hu,noise,actual_grade&#10;A001,R123,165,70,62,F,58,4,0,0,prospective,100,370,60,5,420,395,24,4"></textarea>
     <div class="btns"><button class="btn" id="imp">匯入並預測</button></div>
     <div class="msg" id="msg3"></div>
   </div>
@@ -330,7 +332,7 @@ del{color:var(--mute)}
     <h2>評分方法</h2>
     <div class="disc"><b>⚠ 這是未經驗證的經驗公式，不是已發表的預測模型。</b><br>
       評分架構（看對比、運動、雜訊三個面向）與各項的關鍵分界參考文獻，但組合方式、權重、多數係數與評分切點由本工具設定，尚未以任何外部資料驗證。實際準確度請看「資料庫」頁以貴院資料做的交叉驗證；資料足夠時，可改用「院內校正模型」。<br>
-      標示說明：<span class="src lit">文獻</span> 數值直接取自文獻　<span class="src mix">文獻方向・數值假設</span> 方向有文獻支持、數值為本工具設定　<span class="src asm">本工具假設</span> 無直接文獻</div>
+      標示說明：<span class="src lit">文獻</span> 數值直接取自文獻　<span class="src mix">文獻方向・數值假設</span> 方向有文獻支持、數值為本工具設定　<span class="src asm">本工具假設</span> 無直接文獻　<span class="src inh">院內規範</span> 貴院提供的規範</div>
     <div class="formula">
       <div class="big">S = 0.35·C ＋ 0.40·M ＋ 0.25·N</div>
       <div class="sub">三個面向 <span class="src lit">文獻</span>［3, 9］　權重 0.35 / 0.40 / 0.25 <span class="src asm">本工具假設</span></div>
@@ -350,7 +352,7 @@ del{color:var(--mute)}
       <li><b>對比劑注射</b>：有實測 HU 時以實測為準，注射參數只用來產生建議；掃描前未填 HU 時，依 IDR、kVp、體重與注射時間預估 Aortic root 與 LM HU（強化與 IDR 成正比、與體重成反比、kVp 越低碘的 HU 越高 [5]）。IDR 建議下限隨 kVp 調整：120 kVp 約 1.6、100 kVp 約 1.4、80 kVp 約 1.2、70 kVp 約 1.0 gI/s [8,10]。</li>
       <li><b>品質不佳風險示警</b>：由院內校正模型算出評分 ≤2 的機率，超過門檻即示警；門檻預設由 5 折交叉驗證結果自動選擇，以達到目標敏感度（預設 80%），並同時報告特異度、陽性預測值與 AUC <span class="src asm">本工具假設</span>（方法為常用統計做法，門檻依貴院資料決定）。</li>
       <li><b>院內校正模型</b>：資料量足夠後（≥100 筆有評分；評分 ≤2 為 20–49 筆屬初步、≥50 筆較可靠），以比例勝算邏輯迴歸用貴院資料重新估計 C、M、N 的權重（另加年齡、性別）與評分切點，並以 5 折交叉驗證和規則比較；預設自動採用加權 Kappa 較高者。設定與係數見「資料庫」頁。</li>
-      <li><b>掃描前模式</b>：只需身高、體重、年齡、靜止心跳、contrast volume / injection rate。kVp 依 BMI 與體重自動建議（BMI &lt;21→80；BMI ≤30 或體重 ≤90 kg→100；其餘→120 kVp）[12–15]，protocol 未定時四種都算一次並列出分數；Aortic HU、LM HU 與雜訊皆為估計值。年齡 ≥65 歲因鈣化機率較高略扣分 [3]，並在估算強化時納入年齡（年長者心輸出量較低、強化較高 [5]）。</li>
+      <li><b>掃描前模式</b>：只需身高、體重、年齡、靜止心跳、contrast volume / injection rate。kVp 依院內參考表自動建議（可改用文獻指引 [12–15]；鈣化過多或有 STENT 另用較高 kVp 的院內表），protocol 未定時四種都算一次並列出分數；Aortic HU、LM HU 與雜訊皆為估計值。年齡 ≥65 歲因鈣化機率較高略扣分 [3]，並在估算強化時納入年齡（年長者心輸出量較低、強化較高 [5]）。</li>
       <li><b>心臟運動（權重 40% <span class="src asm">本工具假設</span>）</b>：依 protocol 設定心率門檻（理想上限 / 可接受上限）——Prospective 60/75、Retrospective 65/85、High-pitch 60/65、Wide-detector 65/80 bpm [1–4, 12, 16–18]。心率變異 &gt;10 bpm 與心律不整再依 protocol 敏感度扣分 [3]。</li>
       <li><b>雜訊 / 體型（權重 25% <span class="src asm">本工具假設</span>）</b>：有輸入 Aortic root SD 就直接使用；否則以 BMI 與 kVp 估算（BMI 25、100 kVp 約 25 HU）[3]。SD ≤25 HU 滿分、35 HU 約 75 分、≥45 HU 接近最低分（參考 NoiseNet 各品質組的雜訊分布 [9]）。</li>
     </ul>
@@ -419,13 +421,27 @@ del{color:var(--mute)}
       </div>
       <div class="fbox" style="grid-column:1/-1">
         <h3>kVp 自動建議與依據</h3>
+        <label style="max-width:340px">自動 kVp 採用
+          <select id="kvrule"><option value="inhouse">院內參考表（預設）</option><option value="guideline">文獻指引（SCCT 2011 等）</option></select>
+        </label>
+        <div class="sec">院內參考表 <span class="src inh">院內規範</span></div>
+        <div class="tw"><table>
+          <tr><th>BMI</th><th>一般</th><th>鈣化分數過多或有 STENT</th></tr>
+          <tr><td>&lt;18</td><td><b>70–80</b></td><td rowspan="3" style="vertical-align:middle"><b>100</b></td></tr>
+          <tr><td>18–20</td><td><b>80</b></td></tr>
+          <tr><td>20–24</td><td><b>80–100</b></td></tr>
+          <tr><td>24–27</td><td><b>100</b></td><td rowspan="2" style="vertical-align:middle"><b>120</b></td></tr>
+          <tr><td>≥27</td><td><b>120</b></td></tr>
+        </table></div>
+        <p class="sub">邊界解讀 <span class="src asm">本工具假設</span>：&lt;18｜18 ≤ BMI &lt;20｜20 ≤ BMI &lt;24｜24 ≤ BMI &lt;27｜≥27。表中為區間者（70–80、80–100），預測計算取較高值（80、100），畫面仍顯示區間；實際使用其他值時請在表單手動選擇 kVp。</p>
+        <div class="sec">文獻指引</div>
         <div class="tw"><table>
           <tr><th>條件</th><th>建議</th><th>依據</th></tr>
           <tr><td>BMI &lt;21</td><td><b>80 kV</b></td><td style="white-space:normal">2018 ACC/HRS/NASCI/SCAI/SCCT 共識文件舉例：BMI &lt;21 用 80 kV [15]；另有多中心 RCT 顯示 BMI &lt;25 時 80 kV 影像品質不劣於 100 kV、劑量約減半 [14]</td></tr>
           <tr><td>BMI ≤30 或<br>體重 ≤90 kg</td><td><b>100 kV</b></td><td style="white-space:normal">SCCT 2011 劑量指引：體重 ≤90 kg 或 BMI ≤30 可考慮 100 kV [12]；PROTECTION II 隨機試驗（&lt;90 kg 或 BMI &lt;30）100 kV 影像品質不劣於 120 kV [13]</td></tr>
           <tr><td>BMI &gt;30 且<br>體重 &gt;90 kg</td><td><b>120 kV</b></td><td style="white-space:normal">SCCT 2011 劑量指引：體重 &gt;90 kg 且 BMI &gt;30 通常用 120 kV [12]</td></tr>
         </table></div>
-        <p class="sub">本工具採較保守的 80 kV 門檻（BMI &lt;21）；若貴院經驗或機型支援，BMI 21–25 也可考慮 80 kV [14]。新一代機型（如第三代雙源 CT）的自動 kV 選擇（CARE kV、kV Assist 等）可在較胖的病人使用 70–80 kV；機器有自動選擇時請以機器建議為準，並在表單手動選擇實際使用的 kVp。</p>
+        <p class="sub">本工具採較保守的 80 kV 門檻（BMI &lt;21）；若貴院經驗或機型支援，BMI 21–25 也可考慮 80 kV [14]。新一代機型（如第三代雙源 CT）的自動 kV 選擇（CARE kV、kV Assist 等）可在較胖的病人使用 70–80 kV；機器有自動選擇時請以機器建議為準，並在表單手動選擇實際使用的 kVp。採文獻指引時，勾選鈣化 / STENT 者至少用 100 kV <span class="src asm">本工具假設</span>（參照院內表的做法）。</p>
       </div>
       <div class="fbox" style="grid-column:1/-1">
         <h3>綜合預測（資料庫比對時）</h3>
@@ -513,8 +529,28 @@ function estimateHU(d,inj){
 //  BMI <21 → 80 kV（2018 ACC/SCCT 等共識舉例；BMI <25 的 RCT 亦支持 80 kV 可行）
 //  BMI ≤30 或 體重 ≤90 kg → 100 kV（SCCT 2011 劑量指引；PROTECTION II）
 //  BMI >30 且 體重 >90 kg → 120 kV（SCCT 2011）
-function autoKvp(bmi,wt){if(bmi<21)return 80;if(bmi<=30||(wt>0&&wt<=90))return 100;return 120;}
-function kvOf(d,bmi){const k=+d.kvp;return k>0?k:autoKvp(bmi,d.weight);}
+// ---- 院內 kVp 參考表（使用者提供）----
+// 區間邊界解讀：<18｜18 ≤ BMI <20｜20 ≤ BMI <24｜24 ≤ BMI <27｜≥27
+// 表中為區間者（70–80、80–100），計算時取較高值，畫面同時顯示區間
+function kvInhouse(bmi,cs){
+  if(cs)return bmi<24?{kv:100,txt:'100',row:'BMI <24（鈣化過多 / STENT）'}:{kv:120,txt:'120',row:'BMI ≥24（鈣化過多 / STENT）'};
+  if(bmi<18)return {kv:80,txt:'70–80',row:'BMI <18'};
+  if(bmi<20)return {kv:80,txt:'80',row:'BMI 18–20'};
+  if(bmi<24)return {kv:100,txt:'80–100',row:'BMI 20–24'};
+  if(bmi<27)return {kv:100,txt:'100',row:'BMI 24–27'};
+  return {kv:120,txt:'120',row:'BMI ≥27'};
+}
+// ---- 文獻指引（SCCT 2011 等，見 [12–15]）----
+function kvGuideline(bmi,wt,cs){
+  let kv=bmi<21?80:(bmi<=30||(wt>0&&wt<=90))?100:120,row=bmi<21?'BMI <21':kv===100?'BMI ≤30 或體重 ≤90 kg':'BMI >30 且體重 >90 kg';
+  if(cs&&kv<100){kv=100;row+='（鈣化 / STENT 至少 100）';}
+  return {kv,txt:String(kv),row};
+}
+const KVRULE_KEY='ccta_iq_kvrule';let kvRule='inhouse';
+try{kvRule=localStorage.getItem(KVRULE_KEY)||'inhouse';}catch(e){}
+function kvRec(bmi,wt,cs){return kvRule==='guideline'?{...kvGuideline(bmi,wt,cs),src:'文獻指引'}:{...kvInhouse(bmi,cs),src:'院內參考表'};}
+function autoKvp(bmi,wt,cs){return kvRec(bmi,wt,cs).kv;}
+function kvOf(d,bmi){const k=+d.kvp;return k>0?k:autoKvp(bmi,d.weight,d.cs);}
 function autoOrder(d){
   // 依心率/心律排列可用 protocol（由最適合開始）
   return ['highpitch','wide','prospective','retrospective'];
@@ -603,6 +639,7 @@ function predictOne(d,proto){
   // --- total
   const sum=WC*c+WM*m+WN*n,worst=Math.min(c,m,n),capped=Math.min(sum,worst+CAP),agp=agePen(d.age);
   let total=capped-agp;
+  if(d.cs)notes.push(['',`鈣化分數過多或有 STENT：blooming artifact 可能影響狹窄判讀；kVp 已依${kvRule==='guideline'?'文獻指引（至少 100）':'院內鈣化 / STENT 參考表'}調整。`]);
   if(d.age>=65){
     notes.push(['',`年齡 ${d.age} 歲，冠狀動脈鈣化機率較高，鈣化斑 blooming 可能影響狹窄判讀。`]);}
   if(d.age>0&&d.age<40&&huEst)notes.push(['',`年齡 ${d.age} 歲，心輸出量通常較高，對比劑稀釋較快，實際強化可能低於估計。`]);
@@ -611,7 +648,7 @@ function predictOne(d,proto){
   const bk={lm,c0,ratio,rp,c,hr,m0,hp,ap,m,noise,n,sum,worst,capped,agp,total,grade,p,sex:d.sex};
   if(!notes.length)notes.push(['','各項參數均在理想範圍內。']);
   const snr=noise>0?ao/noise:null;
-  return {bmi,c:Math.round(c),m:Math.round(m),n:Math.round(n),total,grade,noise,est,snr,ratio,notes,ao,lm,huEst,inj,protocol:proto,kvp,kvAuto:!(+d0kvp>0),bk};
+  return {bmi,c:Math.round(c),m:Math.round(m),n:Math.round(n),total,grade,noise,est,snr,ratio,notes,ao,lm,huEst,inj,protocol:proto,kvp,kvAuto:!(+d0kvp>0),kvR:kvRec(bmi,d.weight,d.cs),bk};
 }
 
 // ------------- form
@@ -627,7 +664,7 @@ document.querySelectorAll('#mode button').forEach(b=>b.onclick=()=>{setMode(b.da
 function readForm(){
   const g=k=>F.elements[k].value;const post=mode==='post';
   return {id:g('id').trim(),req:g('req').trim(),height:num(g('height')),weight:num(g('weight')),age:num(g('age')),sex:g('sex')||null,
-    hr:num(g('hr')),hrv:num(g('hrv')),arr:F.elements.arr.checked,protocol:g('protocol'),
+    hr:num(g('hr')),hrv:num(g('hrv')),arr:F.elements.arr.checked,cs:F.elements.cs.checked,protocol:g('protocol'),
     kvp:g('kvp')==='auto'?'auto':+g('kvp'),conc:num(g('conc')),vol:num(g('vol')),rate:num(g('rate')),
     ao:post?num(g('ao')):null,lm:post?num(g('lm')):null,noise:post?num(g('noise')):null,actual:num(g('actual')),
     hrType:post?'scan':'rest'};
@@ -676,8 +713,9 @@ function calcBlock(r){
 }
 function recBlock(d,r){
   const P=PROTO[r.protocol].name;let h='<div class="rec">';
-  h+=`<div>建議條件：<b>${r.auto?P:P}</b> · <b>${r.kvp} kVp</b>${r.kvAuto?'（自動）':''}</div>`;
-  if(r.kvAuto)h+=`<div class="sub">kVp 自動規則：BMI &lt;21 → 80；BMI ≤30 或體重 ≤90 kg → 100；其餘 → 120（SCCT 2011 劑量指引、2018 ACC/SCCT 共識）。機器若有自動 kV 選擇，以機器為準。</div>`;
+  h+=`<div>建議條件：<b>${P}</b> · <b>${r.kvAuto?r.kvR.txt:r.kvp} kVp</b>${r.kvAuto?'（自動）':''}</div>`;
+  if(r.kvAuto){const K=r.kvR;
+    h+=`<div class="sub">kVp 依${K.src}：${K.row} → <b>${K.txt} kVp</b>${K.txt.includes('–')?`（區間，計算時取 ${K.kv}；可在表單手動選擇實際使用值）`:''}。機器若有自動 kV 選擇，以機器為準。</div>`;}
   const lo=IDRMIN[r.kvp]||1.4,conc=d.conc||370;
   h+=`<div class="sub">此 kVp 建議 IDR ≥ ${lo} gI/s，以 ${conc} mgI/mL 約需注射速率 ≥ ${(lo*1000/conc).toFixed(1)} mL/s</div>`;
   if(d.hrType==='rest'&&d.hr>65)h+=`<div class="sub warn">靜止心跳 ${d.hr} bpm：建議先給 β-blocker（目標 ≤60–65 bpm），給藥後以新心率重新評估。</div>`;
@@ -719,7 +757,7 @@ F.addEventListener('submit',e=>e.preventDefault());
 $('#clear').onclick=()=>{F.reset();setEdit(null);render();$('#msg1').textContent='';};
 $('#demo').onclick=()=>{
   const v={id:'',req:'',height:168,weight:82,age:58,hr:68,hrv:'',protocol:'auto',kvp:'auto',conc:'370',vol:60,rate:5,ao:'',lm:'',noise:'',actual:''};setMode('pre');
-  for(const k in v)F.elements[k].value=v[k];F.elements.arr.checked=false;setEdit(null);render();
+  for(const k in v)F.elements[k].value=v[k];F.elements.arr.checked=false;F.elements.cs.checked=false;setEdit(null);render();
 };
 
 // ------------- storage
@@ -745,13 +783,13 @@ function loadRecord(ts){
   ['id','req','height','weight','age','sex','hr','hrv','conc','vol','rate','ao','lm','noise','actual'].forEach(k=>set(k,d[k]));
   set('protocol',d.protocol&&PROTO[d.protocol]?d.protocol:'auto');set('kvp',+d.kvp>0?String(d.kvp):'auto');
   setMode((d.ao>0&&d.lm>0)||d.hrType==='scan'?'post':'pre');
-  F.elements.arr.checked=!!d.arr;setEdit(ts);render();
+  F.elements.arr.checked=!!d.arr;F.elements.cs.checked=!!d.cs;setEdit(ts);render();
   $('#msg1').textContent='已載入資料庫紀錄，修改後按「更新此筆紀錄」。';
   window.scrollTo({top:0,behavior:'smooth'});
 }
 function feat(d,r){
   r=r||predict(d);
-  return {bmi:r.bmi,hr:d.hr,hrv:d.hrv==null?3:d.hrv,arr:d.arr?1:0,protocol:r.protocol,kvp:r.kvp,age:d.age||null,sex:d.sex||null,
+  return {bmi:r.bmi,hr:d.hr,hrv:d.hrv==null?3:d.hrv,arr:d.arr?1:0,protocol:r.protocol,kvp:r.kvp,age:d.age||null,sex:d.sex||null,cs:d.cs===undefined?null:(d.cs?1:0),
     lm:r.lm,ao:r.ao,noise:r.noise,idr:r.inj?r.inj.idr:null,vol:d.vol||null,pre:r.huEst,noiseEst:r.est};
 }
 function dist(a,b){
@@ -762,6 +800,7 @@ function dist(a,b){
   if(a.idr!=null&&b.idr!=null)t.push([a.idr-b.idr,.3]);
   if(a.age!=null&&b.age!=null)t.push([a.age-b.age,8]);
   if(a.sex&&b.sex)t.push([a.sex===b.sex?0:1,1]);
+  if(a.cs!=null&&b.cs!=null)t.push([(a.cs-b.cs)*2,1]);
   if(a.vol!=null&&b.vol!=null)t.push([a.vol-b.vol,10]);
   let s=0;t.forEach(([v,sc])=>{s+=Math.pow(v/sc,2)});
   return Math.sqrt(s/t.length);
@@ -1100,7 +1139,7 @@ $('#demodb').onclick=()=>{
   const protos=['prospective','prospective','prospective','retrospective','highpitch','wide'];
   for(let i=1;i<=60;i++){
     const h=Math.round(g(165,9)),wt=Math.round(g(70,14)),bmi=wt/Math.pow(h/100,2);
-    const kvp=autoKvp(bmi,wt),rate=+(g(5,.8)).toFixed(1),vol=Math.round(g(60,10));
+    const kvp=autoKvp(bmi,wt,false),rate=+(g(5,.8)).toFixed(1),vol=Math.round(g(60,10));
     const d={id:'DEMO-'+String(i).padStart(3,'0'),req:'DR'+(1000+i),height:h,weight:wt,age:Math.round(Math.min(85,Math.max(30,g(60,11)))),sex:R()<.45?'F':'M',hrType:'scan',hr:Math.round(g(64,9)),hrv:Math.max(1,Math.round(g(5,4))),
       arr:R()<.07,protocol:pick(protos),kvp,conc:370,vol,rate,ao:null,lm:null,noise:null,ts:new Date(Date.now()-i*864e5).toISOString()};
     const e=estimateHU(d,injection(d));d.ao=Math.round(e.ao*g(1,.18));d.lm=Math.round(d.ao*g(.93,.05));
@@ -1133,11 +1172,11 @@ $('#delall').onclick=()=>{
 };
 
 // ------------- CSV
-const COLS=['id','req','height','weight','age','sex','hr','hr_type','hrv','arrhythmia','protocol','kvp','conc','volume','rate','ao_hu','lm_hu','noise','actual_grade','pred_score','pred_grade','idr','ts'];
+const COLS=['id','req','height','weight','age','sex','hr','hr_type','hrv','arrhythmia','calc_stent','protocol','kvp','conc','volume','rate','ao_hu','lm_hu','noise','actual_grade','pred_score','pred_grade','idr','ts'];
 const q=v=>{v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
 function buildCSV(){
   return [COLS.join(',')].concat(mem.map(d=>{const r=ready(d)?predict(d):null;
-    return [d.id,d.req,d.height,d.weight,d.age,d.sex||'',d.hr,d.hrType||'',d.hrv,d.arr?1:0,d.protocol,d.kvp,d.conc,d.vol,d.rate,d.ao,d.lm,d.noise,d.actual,
+    return [d.id,d.req,d.height,d.weight,d.age,d.sex||'',d.hr,d.hrType||'',d.hrv,d.arr?1:0,d.cs?1:0,d.protocol,d.kvp,d.conc,d.vol,d.rate,d.ao,d.lm,d.noise,d.actual,
       r?r.total:'',r?r.grade:'',r&&r.inj?r.inj.idr.toFixed(2):'',d.ts].map(q).join(',');})).join('\n');
 }
 $('#exp').onclick=async()=>{
@@ -1165,7 +1204,7 @@ function parseCSV(t){
 }
 // 同一受檢者同一次檢查的判斷依據（無 ts 欄的 CSV 也能去重）
 function parseSex(v){v=String(v||'').trim().toUpperCase();if(/^(M|MALE|男|1)$/.test(v))return 'M';if(/^(F|FEMALE|女|2)$/.test(v))return 'F';return null;}
-function recKey(d){return [d.id,d.req,d.height,d.weight,d.age,d.sex,d.hr,d.vol,d.rate,d.ao,d.lm,d.noise,d.actual].map(v=>v==null?'':String(v).trim()).join('|');}
+function recKey(d){return [d.id,d.req,d.height,d.weight,d.age,d.sex,d.cs?1:0,d.hr,d.vol,d.rate,d.ao,d.lm,d.noise,d.actual].map(v=>v==null?'':String(v).trim()).join('|');}
 function importText(t,quiet){
   const rows=parseCSV(t.replace(/^﻿/,''));if(rows.length<2){if(!quiet)$('#msg3').textContent='沒有讀到資料列。';return {ok:0,bad:0,dup:0};}
   const h=rows[0].map(x=>x.trim().toLowerCase());const ix=k=>h.indexOf(k);
@@ -1175,7 +1214,7 @@ function importText(t,quiet){
     if(pr.startsWith('pro'))pr='prospective';else if(pr.startsWith('ret'))pr='retrospective';
     else if(pr.startsWith('high')||pr.includes('flash'))pr='highpitch';else if(pr.startsWith('wide'))pr='wide';else pr='auto';
     const d={id:g('id'),req:g('req'),height:num(g('height')),weight:num(g('weight')),age:num(g('age')),sex:parseSex(g('sex')),hr:num(g('hr')),hrv:num(g('hrv')),
-      arr:/^(1|y|yes|true)$/i.test(g('arrhythmia')),protocol:pr,kvp:num(g('kvp'))||'auto',conc:num(g('conc'))||370,vol:num(g('volume')),rate:num(g('rate')),ao:num(g('ao_hu')),lm:num(g('lm_hu')),
+      arr:/^(1|y|yes|true)$/i.test(g('arrhythmia')),cs:/^(1|y|yes|true|是)$/i.test(g('calc_stent')),protocol:pr,kvp:num(g('kvp'))||'auto',conc:num(g('conc'))||370,vol:num(g('volume')),rate:num(g('rate')),ao:num(g('ao_hu')),lm:num(g('lm_hu')),
       noise:num(g('noise')),actual:num(g('actual_grade')),ts:g('ts')||new Date().toISOString()+'-'+(seq++)};
     if(g('hr_type'))d.hrType=g('hr_type');
     if(seen.has(d.ts)||seenK.has(recKey(d))){dup++;return;}
@@ -1249,6 +1288,8 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   if(b.dataset.v==='list')renderList();
 });
 $('#calbase').onchange=e=>{calPref.base=e.target.value;calSave();renderPerf();renderCal();render();};
+$('#kvrule').value=kvRule;
+$('#kvrule').onchange=e=>{kvRule=e.target.value;try{localStorage.setItem(KVRULE_KEY,kvRule);}catch(_){}IDX=null;render();renderList();schedulePerf();};
 $('#calforce').onchange=e=>{calPref.force=e.target.checked;calSave();runPerf();};
 function syncRiskUI(){$('#riskmode').value=calPref.riskMode==='manual'?'manual':'t'+calPref.riskTarget;$('#riskthr').value=Math.round(calPref.riskThr*100);$('#riskthrwrap').style.display=calPref.riskMode==='manual'?'':'none';}
 $('#riskmode').onchange=e=>{const v=e.target.value;if(v==='manual')calPref.riskMode='manual';else{calPref.riskMode='target';calPref.riskTarget=+v.slice(1);}calSave();syncRiskUI();runPerf();};
