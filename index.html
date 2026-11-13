@@ -66,6 +66,12 @@ tr.cur td{background:var(--acc2)}
 .tier{display:inline-block;font-size:11.5px;font-weight:600;border-radius:5px;padding:0 7px;margin-left:2px}
 .tier.ok{background:#dff3e8;color:#1e7a4f}.tier.pre{background:#fdf0d6;color:#9a6408}.tier.try,.tier.none{background:#f9e1df;color:#a33a2f}
 @media (prefers-color-scheme:dark){.tier.ok{background:#173a2a;color:#7fd8a8}.tier.pre{background:#3d3018;color:#f0c46a}.tier.try,.tier.none{background:#3f2220;color:#f0a39b}}
+.deep details{border-top:1px solid var(--line);padding:8px 0}
+.deep details:first-of-type{border-top:none}
+.deep summary{cursor:pointer;font-weight:700;color:var(--acc);font-size:15px;padding:2px 0}
+.deep p,.deep li{font-size:14px;line-height:1.7}
+.deep ul,.deep ol{padding-left:20px;margin:4px 0}
+.deep table td{white-space:normal;font-size:13px}
 .disc{border:2px solid var(--g2);background:var(--card);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:14px}
 .disc b{color:var(--g2)}
 details.calc{margin-top:12px;border:1px solid var(--line);border-radius:8px;padding:8px 12px}
@@ -365,6 +371,95 @@ del{color:var(--mute)}
       <tr><td>&lt;50</td><td><span class="pill" style="background:var(--g1)">1</span></td><td>不佳，可能無法診斷</td></tr>
     </table>
     <p class="sub">四分制（4 = excellent、3 = good、2 = adequate、1 = nondiagnostic）是冠狀動脈 CTA 研究常用的影像品質量表，例如 PROTECTION II［13］與 PROTECTION VI 心率分析［2］。各級的中文描述為本工具的意譯 <span class="src mix">文獻方向・數值假設</span>；「總分 → 評分」的分界 <span class="src asm">本工具假設</span>。<b>注意方向：</b>部分研究的量表方向相反（1 = 無偽影、4 = 無法判讀，例如［4］），匯入 CSV 時請統一為 4 = 最佳；貴院也應事先定義是以「整體」或「最差節段」評分，並固定由同一標準評分，校正模型才有意義。</p>
+  </div>
+  <div class="card deep" style="margin-top:14px">
+    <h2>公式詳解：邏輯、文獻關係與可能問題</h2>
+    <p class="sub">依計算順序說明每一段在算什麼、為什麼這樣設計、哪些有文獻、哪些是本工具設定，以及已知的限制。點各段標題展開。</p>
+
+    <details open><summary>一、整體架構</summary>
+      <p><b>S = 0.35·C ＋ 0.40·M ＋ 0.25·N → 套用上限 → 年齡扣分 → 換成 1–4 分</b></p>
+      <p>先把三個影響影像品質的面向各換算成 0–100 分，加權相加，再處理極端情況，最後對應到四分制。這是<b>規則式經驗公式</b>，不是用資料擬合出的統計模型。選擇「對比、運動、雜訊」三個面向 <span class="src lit">文獻</span>：雜訊與血管強化是影響 CCTA 品質與診斷準確度的重要因素 [9]，心率與鈣化是品質的獨立預測因子 [3]。</p>
+    </details>
+
+    <details><summary>二、C 對比分數（LM density）</summary>
+      <p><b>計算：</b>LM 325–500 HU 為 100 分；往下 300 HU→85、250→65、200→40、&lt;150→10；往上 600→85、800→65，之間線性內插。LM/Aorta 比值 &lt;0.85 扣 12、&lt;0.70 扣 25。</p>
+      <p><b>文獻關係：</b>325–500 HU 為理想強化區間，&gt;500 HU 可能低估鈣化 <span class="src lit">文獻</span> [6, 7]。其餘分界點的分數、線性內插、比值懲罰 <span class="src asm">本工具假設</span>。</p>
+      <p><b>可能的問題：</b></p>
+      <ul>
+        <li>只看 LM 一個點：LM 管腔小，小 ROI 易受部分容積效應與斑塊影響，量測本身不穩定。</li>
+        <li>比值懲罰可能誤判：LM 狹窄或量測位置不同造成的低比值，會被誤當成注射問題扣分。</li>
+        <li>不反映遠端血管：RCA 或遠端分支強化不足時，LM 可能仍正常。</li>
+      </ul>
+    </details>
+
+    <details><summary>三、M 運動分數（心率）</summary>
+      <p><b>計算：</b>心率 ≤ 理想上限得 100 分，到可接受上限降到 50 分，再 +15 bpm 降到 10 分（Prospective 60/75、Retrospective 65/85、High-pitch 60/65、Wide-detector 65/80 bpm）。心率變異 &gt;5 bpm 開始扣分（最多 25 分 × 各 protocol 係數）；心律不整扣 15–45 分。</p>
+      <p><b>文獻關係：</b></p>
+      <ul>
+        <li>心率是品質的獨立預測因子 <span class="src lit">文獻</span> [3]，為運動權重最高（40%）的主要理由。</li>
+        <li>掃描時心率最好 &lt;65、理想 &lt;60 bpm <span class="src lit">文獻</span> [12]；&gt;75 bpm 特別建議 β-blocker、60–75 需審慎評估 <span class="src lit">文獻</span> [2]。</li>
+        <li>High-pitch 的驗證研究只收給藥後 ≤60 bpm 的竇性心律病人 <span class="src lit">文獻</span> [4]。</li>
+        <li>Wide-detector 與 Retrospective 的可接受上限、「+15 bpm 降到 10 分」、心率變異係數、心律不整扣分 <span class="src asm">本工具假設</span>。</li>
+      </ul>
+      <p><b>可能的問題：</b></p>
+      <ul>
+        <li><b>門檻依機型而定：</b>SCCT 註明實際數值取決於機型 [12]，但工具沒有「機型／時間解析度」欄位，同一 protocol 在不同機型的耐受心率可能差很多。</li>
+        <li><b>掃描前用的是靜止心跳：</b>β-blocker、憋氣、緊張都會改變掃描時心率，掃描前預測天生較不準。</li>
+        <li><b>心率變異的證據互相矛盾：</b>320 列 CT 研究發現心率是唯一影響因素、心率變異影響不顯著 [17]，工具對所有 protocol 都扣心率變異，可能扣太重。</li>
+        <li><b>心律不整只有有／無：</b>AF 與偶發 PVC 的影響差很多。</li>
+      </ul>
+    </details>
+
+    <details><summary>四、N 雜訊分數（Aortic root SD）</summary>
+      <p><b>計算：</b>SD ≤25 HU→100、35→75、45→30、≥55→5。未輸入 SD 時估算：SD ≈ 25 × e<sup>0.035×(BMI−25)</sup> × kV 係數 × 性別係數。</p>
+      <p><b>文獻關係：</b>分界參考 NoiseNet 各品質組的雜訊中位數（約 33 / 36 / 42 HU）<span class="src mix">文獻方向・數值假設</span> [9]；BMI 與女性為 SNR 的獨立預測因子 <span class="src mix">文獻方向・數值假設</span> [3]。估算公式的係數（指數 0.035、基準 25 HU、女性 0.92、kV 係數）<span class="src asm">本工具假設</span>。</p>
+      <p><b>可能的問題：</b></p>
+      <ul>
+        <li><b>SD 不能跨情況比較：</b>受 kernel、重建法（FBP / iterative / 深度學習）、ROI 大小影響很大；同一病人用深度學習重建，SD 可能少一半。NoiseNet 的數值在它自己的條件下量得，套用到貴院不一定對。</li>
+        <li><b>對比與雜訊分開評分，忽略兩者連動（結構性問題）：</b>降低 kV 時 HU 與雜訊同時上升；RCT 中 80 kVp 訊號與雜訊都較 100 kVp 高，但影像品質仍不劣於 100 kVp [14]。工具把 C 與 N 分開加減分，可能高估低 kV 的雜訊問題；真正決定可見度的是兩者的比值（CNR）。</li>
+      </ul>
+    </details>
+
+    <details><summary>五、組合方式（權重、上限、年齡、分界）</summary>
+      <div class="tw"><table>
+        <tr><th>步驟</th><th>內容</th><th>來源</th></tr>
+        <tr><td>權重</td><td>0.35 / 0.40 / 0.25</td><td><span class="src asm">本工具假設</span>（運動最高，因心率在多變項分析中最穩定 [3]）</td></tr>
+        <tr><td>上限</td><td>S ≤ 三項最低分 + 35</td><td><span class="src asm">本工具假設</span></td></tr>
+        <tr><td>年齡</td><td>65–74 歲 −2、≥75 歲 −4</td><td><span class="src mix">文獻方向・數值假設</span>（以年齡代替鈣化；鈣化為品質獨立預測因子 [3]）</td></tr>
+        <tr><td>分界</td><td>≥85→4、70–84→3、50–69→2、&lt;50→1</td><td><span class="src asm">本工具假設</span></td></tr>
+        <tr><td>四分制</td><td>4 優良、3 良好、2 可接受、1 無法診斷</td><td><span class="src lit">文獻</span> [2, 13]</td></tr>
+      </table></div>
+      <p><b>可能的問題：</b></p>
+      <ul>
+        <li><b>加權相加假設三項可互相抵消：</b>實際上一個嚴重問題就可能讓整個檢查無法診斷（例如心率 90 bpm 時對比再好也沒用）。上限只是補救，「+35」沒有依據。</li>
+        <li><b>未考慮交互作用：</b>例如高心率加高雜訊，比各自的影響更糟。</li>
+        <li><b>年齡可能被重複計算：</b>掃描前估算 HU 時年齡讓強化變高，總分又因年齡扣分，兩者方向相反、抵消程度不明。</li>
+        <li><b>與鈣化欄位重疊：</b>「鈣化分數過多或有 STENT」目前只影響 kVp 建議與相似案例比對、不影響總分，年齡扣分卻仍存在；鈣化可能被重複計算，也可能該扣沒扣。</li>
+        <li><b>分界造成跳級：</b>總分 84 與 85 只差 1 分，評分卻差一級。</li>
+      </ul>
+    </details>
+
+    <details><summary>六、掃描前的 HU 估算</summary>
+      <p><b>公式：</b>Aorta HU ≈ 340 × (IDR ÷ 1.6) × kV 係數 × (75 ÷ 體重)<sup>0.7</sup> × 注射時間係數 × 年齡係數；LM = 0.92 × Aorta。</p>
+      <p><b>文獻關係：</b>強化主要由 IDR 決定、與體重成反比 <span class="src mix">文獻方向・數值假設</span> [5, 6]。基準 340、指數 0.7（文獻的「反比」相當於 1）、0.92、年齡係數 <span class="src asm">本工具假設</span>。</p>
+      <p><b>可能的問題：</b></p>
+      <ul>
+        <li><b>漏掉最大的變因：</b>心輸出量與觸發時間對實際強化的影響，常大於這裡的所有因素，但掃描前無法得知；估算誤差可能達 ±100 HU 以上。</li>
+        <li><b>誤差往下傳遞：</b>估算值會進入 C 分數再進總分，畫面上的整數看似精確，實際不確定性很大。</li>
+      </ul>
+    </details>
+
+    <details><summary>七、整體結構上的問題</summary>
+      <ol>
+        <li><b>完全沒有驗證過：</b>最根本的問題；沒有任何外部資料證明公式準確。</li>
+        <li><b>示範資料會循環驗證：</b>示範資料的實際評分由這套規則產生，在示範資料上表現好不代表準確。</li>
+        <li><b>評分本身有變異：</b>不同評分者、評整體或評最差節段，結果都不同，模型學到的就是這些不一致。</li>
+        <li><b>缺少重要因素：</b>機型與時間解析度、重建方法、呼吸配合、觸發時間、鈣化程度（目前只是勾選）、支架尺寸。</li>
+        <li><b>選擇偏差：</b>資料庫中的病人都經過臨床篩選（例如心率太快可能已改期），模型看不到最難的案例。</li>
+      </ol>
+      <p><b>現有補救：</b>「資料庫預測能力」以交叉驗證報告院內實際準確度；「院內校正模型」以院內資料重新估計三項權重。但校正模型仍沿用 C、M、N 三條曲線，第四段的 CNR 問題無法由它修正。</p>
+      <p><b>優先改善方向：</b>① 掃描後模式改用 CNR 取代分開的 C 與 N；② 新增機型／重建方法欄位，讓門檻依機型調整；③ 把鈣化勾選納入評分，並取消以年齡代替鈣化的扣分。</p>
+    </details>
   </div>
   <div class="card" style="margin-top:14px">
     <h2>各項分數對照</h2>
