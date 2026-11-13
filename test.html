@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CCTA 影像品質預測</title>
+<style>
+:root{
+  --bg:#f5f6f8;--card:#fff;--ink:#1b2430;--mute:#66707d;--line:#e2e5ea;
+  --acc:#0f6e8c;--acc2:#e8f3f6;
+  --g4:#1e8a5a;--g3:#5a9e2f;--g2:#d08a12;--g1:#c23b2e;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#12161c;--card:#1b2129;--ink:#e6e9ee;--mute:#98a2ae;--line:#2c343f;--acc:#4fb3d1;--acc2:#1d2e36;
+  --g4:#3fbf85;--g3:#8cc65a;--g2:#e3a53a;--g1:#e2685c;}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC","PingFang TC",sans-serif}
+header{padding:18px 16px 6px;max-width:1100px;margin:auto}
+h1{font-size:20px;margin:0}
+header p{margin:4px 0 0;color:var(--mute);font-size:13px}
+nav{display:flex;gap:6px;max-width:1100px;margin:10px auto 0;padding:0 16px}
+nav button{flex:1;padding:9px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;font-size:14px;cursor:pointer}
+nav button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+main{max-width:1100px;margin:auto;padding:12px 16px 40px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:820px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.card h2{font-size:15px;margin:0 0 10px;color:var(--acc)}
+.sec{font-size:12px;color:var(--mute);margin:12px 0 6px;font-weight:600;letter-spacing:.03em}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.row4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+@media(max-width:520px){.row4{grid-template-columns:1fr 1fr}}
+@media(max-width:420px){.row3{grid-template-columns:1fr 1fr}}
+details.def{margin-top:12px;background:var(--acc2);border-radius:8px;padding:8px 12px;font-size:13px}
+details.def summary{cursor:pointer;color:var(--acc);font-weight:600}
+details.def p{margin:6px 0}
+ol.refs{padding-left:20px;font-size:13px}
+ol.refs li{margin:6px 0}
+ol.refs a{color:var(--acc);word-break:break-all}
+.est{font-size:11px;color:var(--g2);margin-left:4px}
+.match{background:var(--acc2);border-radius:8px;padding:9px 11px;margin-bottom:10px;font-size:14px}
+.match .btn{padding:4px 10px;font-size:13px;margin-left:6px}
+.dbsum{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 10px}
+.dbsum div{flex:1;min-width:120px;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.dbsum b{display:block;font-size:20px}
+.dbsum span{font-size:12px;color:var(--mute)}
+tr.cur td{background:var(--acc2)}
+.probs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:6px}
+.probs span{position:relative;font-size:12px;border:1px solid var(--line);border-radius:6px;padding:3px 6px;overflow:hidden}
+.probs i{position:absolute;left:0;top:0;bottom:0;opacity:.18}
+.src{display:inline-block;font-size:11px;font-weight:600;border-radius:5px;padding:0 6px;margin:0 2px;vertical-align:1px;white-space:nowrap}
+.src.lit{background:#dff3e8;color:#1e7a4f}
+.src.mix{background:#fdf0d6;color:#9a6408}
+.src.asm{background:#eceef1;color:#59616c}
+@media (prefers-color-scheme:dark){.src.lit{background:#173a2a;color:#7fd8a8}.src.mix{background:#3d3018;color:#f0c46a}.src.asm{background:#2a3038;color:#aab3be}}
+.risk{border-radius:10px;padding:10px 12px;margin-top:12px;font-size:14px;border:2px solid var(--line)}
+.risk .rh{font-weight:700;font-size:15px;margin-bottom:2px}
+.risk.hit{border-color:var(--g1);background:color-mix(in srgb,var(--g1) 9%,var(--card))}
+.risk.hit .rh{color:var(--g1)}
+.risk.ok{border-color:var(--g4)}
+.risk.ok .rh{color:var(--g4)}
+.risk.none{font-size:13px;color:var(--mute);border-style:dashed}
+.tier{display:inline-block;font-size:11.5px;font-weight:600;border-radius:5px;padding:0 7px;margin-left:2px}
+.tier.ok{background:#dff3e8;color:#1e7a4f}.tier.pre{background:#fdf0d6;color:#9a6408}.tier.try,.tier.none{background:#f9e1df;color:#a33a2f}
+@media (prefers-color-scheme:dark){.tier.ok{background:#173a2a;color:#7fd8a8}.tier.pre{background:#3d3018;color:#f0c46a}.tier.try,.tier.none{background:#3f2220;color:#f0a39b}}
+.disc{border:2px solid var(--g2);background:var(--card);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:14px}
+.disc b{color:var(--g2)}
+details.calc{margin-top:12px;border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+details.calc summary{cursor:pointer;color:var(--acc);font-weight:600;font-size:14px}
+details.calc td{white-space:normal;font-size:13px;padding:5px 4px}
+details.calc td:first-child{white-space:nowrap;color:var(--mute)}
+details.calc td:last-child{text-align:right;white-space:nowrap}
+details.calc tr.tot td{border-top:2px solid var(--line);font-size:14px}
+.formula{background:var(--acc2);border-radius:10px;padding:14px;margin:8px 0 14px;font-size:15px;line-height:1.9}
+.formula .big{font-size:20px;font-weight:700;color:var(--acc);white-space:nowrap}
+.formula ul.fl{margin:4px 0;padding-left:0;list-style:none;font-size:14px;line-height:1.7}
+.gl{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:6px 0 8px}
+@media(max-width:420px){.gl{grid-template-columns:repeat(2,1fr)}}
+.gl span{color:#fff;border-radius:6px;padding:4px 6px;text-align:center;font-size:13px;font-weight:600}
+.formula code{background:none;font-family:inherit;font-weight:600}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:700px){.fgrid{grid-template-columns:1fr}}
+.fbox{border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:0;overflow-x:auto}
+.fbox h3{font-size:14px;margin:0 0 4px;color:var(--acc)}
+.fbox svg{width:100%;height:auto;display:block;margin:4px 0}
+.fbox table td,.fbox table th{padding:4px 6px;font-size:12.5px}
+.fbox .sub{font-size:12.5px}
+.perf td,.perf th{text-align:right}
+.perf td:first-child,.perf th:first-child{text-align:left}
+.perf tr.hl td{background:var(--acc2);font-weight:600}
+.perf .ci{display:block;font-size:11px;color:var(--mute);font-weight:400}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px}
+@media(max-width:480px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.kpis div{background:var(--acc2);border-radius:8px;padding:7px 9px}
+#perf1 a{color:var(--acc)}
+.kpis b{display:block;font-size:19px}
+.kpis span{font-size:11.5px;color:var(--mute)}
+.drop{display:block;border:2px dashed var(--line);border-radius:10px;padding:22px 12px;text-align:center;cursor:pointer;color:var(--ink);transition:.15s}
+.drop input{display:none}
+.drop b{display:block;color:var(--acc);font-size:15px}
+.drop span{font-size:13px;color:var(--mute)}
+.drop.over{border-color:var(--acc);background:var(--acc2)}
+#impres table{margin-top:10px}
+#impres .tot td{font-weight:700;border-top:2px solid var(--line)}
+.seg{display:flex;gap:6px;margin-bottom:12px}
+.seg button{flex:1;padding:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
+.seg button small{display:block;font-weight:400;font-size:11px;color:var(--mute)}
+.seg button.on{border-color:var(--acc);background:var(--acc2);color:var(--acc)}
+.rec{border:1px solid var(--acc);border-radius:8px;padding:9px 12px;margin-top:12px;font-size:14px}
+.rec b{color:var(--acc)}
+table.pt{margin-top:6px}
+table.pt td,table.pt th{padding:5px 6px}
+label{display:block;font-size:13px;color:var(--mute)}
+input,select{width:100%;margin-top:3px;padding:8px 9px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--ink);font-size:15px}
+input:focus,select:focus{outline:2px solid var(--acc);outline-offset:-1px}
+.chk{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:14px;color:var(--ink)}
+.chk input{width:auto;margin:0}
+.hint{font-size:12px;color:var(--mute)}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.btn{padding:9px 14px;border-radius:8px;border:1px solid var(--acc);background:var(--acc);color:#fff;font-size:14px;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--acc)}
+.score{display:flex;align-items:center;gap:16px}
+.ring{width:110px;height:110px;flex:none}
+.grade{font-size:22px;font-weight:700}
+.sub{color:var(--mute);font-size:13px}
+.bar{margin:10px 0}
+.bar .t{display:flex;justify-content:space-between;font-size:13px}
+.bar .b{height:8px;background:var(--line);border-radius:5px;overflow:hidden;margin-top:3px}
+.bar .b i{display:block;height:100%;border-radius:5px}
+.kv{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.kv div{background:var(--acc2);border-radius:8px;padding:7px 9px}
+.kv b{display:block;font-size:17px}
+.kv span{font-size:12px;color:var(--mute)}
+ul.notes{padding-left:18px;margin:8px 0 0}
+ul.notes li{margin:4px 0;font-size:14px}
+.warn{color:var(--g1)}
+.empty{color:var(--mute);text-align:center;padding:30px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{color:var(--mute);font-weight:600}
+.tw{overflow-x:auto}
+.pill{display:inline-block;padding:1px 8px;border-radius:10px;color:#fff;font-size:12px}
+textarea{width:100%;min-height:120px;font:12px/1.4 ui-monospace,Menlo,monospace;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--ink);padding:8px}
+.foot{font-size:12px;color:var(--mute);margin-top:18px;line-height:1.6}
+.hidden{display:none}
+.msg{font-size:13px;color:var(--acc);margin-top:8px;min-height:18px}
+del{color:var(--mute)}
+</style>
+</head>
+<body>
+<header>
+  <h1>CCTA 影像品質預測</h1>
+  <p>輸入受檢者與掃描參數，預估冠狀動脈 CTA 的影像品質（4 分制），並列出主要影響因素。</p>
+</header>
+<nav>
+  <button data-v="pred" class="on">單筆預測</button>
+  <button data-v="list">資料庫</button>
+  <button data-v="model">評分方法</button>
+</nav>
+<main>
+<!-- ================= 單筆預測 ================= -->
+<section id="v-pred">
+<div class="grid">
+  <div class="card">
+    <h2>受檢者資料</h2>
+    <form id="f" autocomplete="off">
+      <div class="seg" id="mode">
+        <button type="button" data-m="pre" class="on">掃描前<small>只有基本資料</small></button>
+        <button type="button" data-m="post">掃描後<small>有影像測量</small></button>
+      </div>
+      <div class="row">
+        <label>ID<input name="id" placeholder="病歷號 / 編號"></label>
+        <label>Req no.<input name="req" placeholder="申請單號"></label>
+      </div>
+      <div class="sec">基本資料</div>
+      <div class="row4">
+        <label>身高 (cm)<input name="height" type="number" step="0.1" inputmode="decimal"></label>
+        <label>體重 (kg)<input name="weight" type="number" step="0.1" inputmode="decimal"></label>
+        <label>年齡<input name="age" type="number" inputmode="numeric"></label>
+        <label>性別<select name="sex"><option value="">未填</option><option value="M">男</option><option value="F">女</option></select></label>
+      </div>
+      <div class="sec">心律</div>
+      <div class="row">
+        <label><span id="hrlab">靜止心跳 (bpm)</span><input name="hr" type="number" inputmode="numeric"></label>
+        <label>心率變異 max−min<input name="hrv" type="number" inputmode="numeric" placeholder="選填"></label>
+      </div>
+      <label class="chk"><input type="checkbox" name="arr"> 心律不整（AF、頻繁 PVC 等）</label>
+      <div class="sec">對比劑注射</div>
+      <div class="row3">
+        <label>Contrast volume (mL)<input name="vol" type="number" step="1" inputmode="decimal"></label>
+        <label>Injection rate (mL/s)<input name="rate" type="number" step="0.1" inputmode="decimal"></label>
+        <label>濃度 (mgI/mL)
+          <select name="conc">
+            <option>300</option><option>320</option><option>350</option><option selected>370</option><option>400</option>
+          </select>
+        </label>
+      </div>
+      <div class="hint" id="inj"></div>
+      <div class="sec">掃描條件 <span class="hint" style="font-weight:400">（未定可選自動建議）</span></div>
+      <div class="row">
+        <label>Scanning protocol
+          <select name="protocol">
+            <option value="auto" selected>未定（自動建議）</option>
+            <option value="prospective">Prospective ECG-triggered</option>
+            <option value="retrospective">Retrospective ECG-gated</option>
+            <option value="highpitch">High-pitch spiral (Flash)</option>
+            <option value="wide">Wide-detector 單心跳 (16 cm)</option>
+          </select>
+        </label>
+        <label>管電壓 kVp
+          <select name="kvp">
+            <option value="auto" selected>自動（依 BMI / 體重）</option>
+            <option>70</option><option>80</option><option>90</option>
+            <option>100</option><option>120</option><option>140</option>
+          </select>
+        </label>
+      </div>
+      <div class="post-only hidden">
+        <div class="sec">影像測量</div>
+        <div class="row">
+          <label>Aortic root density (HU)<input name="ao" type="number" inputmode="numeric"></label>
+          <label>LM density (HU)<input name="lm" type="number" inputmode="numeric"></label>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <label>Aortic root SD (HU)<input name="noise" type="number" step="0.1" inputmode="decimal" placeholder="選填，未填則估算"></label>
+          <label>實際品質評分 (1–4)<select name="actual"><option value="">選填</option><option>4</option><option>3</option><option>2</option><option>1</option></select></label>
+        </div>
+      </div>
+      <details class="def">
+        <summary>量測定義</summary>
+        <p><b>Aortic root density</b>：在 LM 開口高度的軸切面，於升主動脈根部放圓形 ROI（約 1–2 cm²，避開管壁、鈣化與 streak artifact），取平均 CT 值 (HU)。</p>
+        <p><b>Aortic root SD（影像雜訊）</b>：同一個 ROI 內 CT 值的<b>標準差</b> (HU)，代表 image noise；建議連續 3 層取平均。數值受 kernel、重建法（FBP / IR / DL）與 ROI 大小影響，跨機型比較需注意。</p>
+        <p><b>LM density</b>：LM 管腔中央放小 ROI（約 1–2 mm²，不碰管壁與斑塊）的平均 HU。</p>
+        <p><b>SNR</b> = Aortic root HU ÷ SD；<b>CNR</b> = (血管 HU − 血管周圍脂肪 HU) ÷ SD。</p>
+        <p><b>IDR</b>（碘注射速率, gI/s）= 注射速率 × 濃度 ÷ 1000；<b>總碘量</b> (gI) = 總量 × 濃度 ÷ 1000。</p>
+      </details>
+      <div class="btns">
+        <button type="button" class="btn" id="save">儲存到紀錄</button>
+        <button type="button" class="btn ghost" id="clear">清除</button>
+        <button type="button" class="btn ghost" id="demo">填入範例</button>
+      </div>
+      <div class="msg" id="msg1"></div>
+    </form>
+  </div>
+
+  <div class="card" id="out">
+    <h2>預測結果</h2>
+    <div id="res"><div class="empty">填入身高、體重、心跳與 injection rate 後即自動計算</div></div>
+  </div>
+</div>
+<div class="card" style="margin-top:14px">
+  <h2>資料庫預測能力 <span class="hint" style="font-weight:400" id="perfmode"></span></h2>
+  <div id="perf1"><div class="empty">計算中…</div></div>
+</div>
+<div class="card" style="margin-top:14px">
+  <h2>資料庫比對</h2>
+  <div id="dbres"><div class="empty">輸入 ID / Req no. 或受檢者資料後，自動與資料庫比對</div></div>
+</div>
+</section>
+
+<!-- ================= 紀錄 / 批次 ================= -->
+<section id="v-list" class="hidden">
+  <div class="card">
+    <h2>資料庫</h2>
+    <p class="hint">資料庫只存在這台電腦的這個瀏覽器中，換電腦、換瀏覽器或清除瀏覽器資料就會不見，請定期用「下載 CSV」備份。可用下方 CSV 匯入既有受檢者資料（含實際評分），比對準確度會隨筆數增加。</p>
+    <div id="agree" class="sub"></div>
+    <div class="sec">預測能力（留一交叉驗證，資料變動時即時更新）</div>
+    <div id="perf2"></div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <h2>院內校正模型</h2>
+    <p class="hint">用貴院有實際評分的資料，以比例勝算（順序）邏輯迴歸重新估計三個面向的權重與評分切點，並用 5 折交叉驗證和規則比較。門檻：有評分 ≥100 筆，且評分 ≤2：<b>20–49 筆為初步</b>（顯示模型與示警，但自動模式仍採用規則）、<b>≥50 筆較可靠</b>（自動模式才可能改用校正模型）。50 筆依「每個自變項約 10 個事件」的經驗法則（模型有 5 個自變項）。</p>
+    <div id="calres"></div>
+    <div class="row" style="margin-top:10px">
+      <label>預測採用的基準模型
+        <select id="calbase">
+          <option value="auto">自動（達「可靠」後，交叉驗證加權 Kappa 較高者）</option>
+          <option value="rule">固定用規則</option>
+          <option value="calib">固定用院內校正模型</option>
+        </select>
+      </label>
+      <label class="chk" style="align-self:end"><input type="checkbox" id="calforce"> 未達初步門檻也試算（僅供參考）</label>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <label>品質不佳風險門檻
+        <select id="riskmode">
+          <option value="t0.7">自動：目標敏感度 70%</option>
+          <option value="t0.8">自動：目標敏感度 80%</option>
+          <option value="t0.9">自動：目標敏感度 90%</option>
+          <option value="t0.95">自動：目標敏感度 95%</option>
+          <option value="manual">手動指定門檻</option>
+        </select>
+      </label>
+      <label id="riskthrwrap">手動門檻（評分 ≤2 機率 %）<input id="riskthr" type="number" min="1" max="99" step="1"></label>
+    </div>
+    <p class="hint">自動模式會在交叉驗證結果中，找出能達到目標敏感度的最高門檻（示警最少）。敏感度越高，示警越多、陽性預測值越低。</p>
+    <div class="tw"><table id="tbl"></table></div>
+    <div class="btns">
+      <button class="btn" id="dl">下載 CSV</button>
+      <button class="btn ghost" id="exp">複製 CSV</button>
+      <button class="btn ghost" id="delall">刪除全部</button>
+      <button class="btn ghost" id="demodb">載入示範資料（60 筆模擬）</button>
+      <button class="btn ghost" id="rmdemo">移除示範資料</button>
+    </div>
+    <div class="msg" id="msg2"></div>
+    <textarea id="csvout" class="hidden" readonly></textarea>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <h2>批次匯入 CSV</h2>
+    <p class="hint">第一列為欄位名稱，欄位：<code>id,req,height,weight,age,sex,hr,hrv,arrhythmia,protocol,kvp,conc,volume,rate,ao_hu,lm_hu,noise,actual_grade</code><br>
+    protocol 可填 prospective / retrospective / highpitch / wide；arrhythmia 填 1 或 0；conc 為 mgI/mL（空白視為 370）、volume 為 mL、rate 為 mL/s；age、sex（M/F 或 男/女）、hrv、noise、actual_grade 可留空（actual_grade 請用 4 = 最佳、1 = 無法診斷）；protocol、kvp 留空則自動建議；ao_hu / lm_hu 留空時需有 rate。</p>
+    <label class="drop" id="drop">
+      <input type="file" id="file" accept=".csv,text/csv,.txt" multiple>
+      <b>點此選擇 CSV 檔（可多選）</b>
+      <span>或把一批 CSV 檔直接拖曳到這裡</span>
+    </label>
+    <div id="impres"></div>
+    <p class="hint" style="margin-top:10px">或直接貼上 CSV 內容：</p>
+    <textarea id="csvin" placeholder="id,req,height,weight,age,sex,hr,hrv,arrhythmia,protocol,kvp,conc,volume,rate,ao_hu,lm_hu,noise,actual_grade&#10;A001,R123,165,70,62,F,58,4,0,prospective,100,370,60,5,420,395,24,4"></textarea>
+    <div class="btns"><button class="btn" id="imp">匯入並預測</button></div>
+    <div class="msg" id="msg3"></div>
+  </div>
+</section>
+
+<!-- ================= 評分方法 ================= -->
+<section id="v-model" class="hidden">
+  <div class="card">
+    <h2>評分方法</h2>
+    <div class="disc"><b>⚠ 這是未經驗證的經驗公式，不是已發表的預測模型。</b><br>
+      評分架構（看對比、運動、雜訊三個面向）與各項的關鍵分界參考文獻，但組合方式、權重、多數係數與評分切點由本工具設定，尚未以任何外部資料驗證。實際準確度請看「資料庫」頁以貴院資料做的交叉驗證；資料足夠時，可改用「院內校正模型」。<br>
+      標示說明：<span class="src lit">文獻</span> 數值直接取自文獻　<span class="src mix">文獻方向・數值假設</span> 方向有文獻支持、數值為本工具設定　<span class="src asm">本工具假設</span> 無直接文獻</div>
+    <div class="formula">
+      <div class="big">S = 0.35·C ＋ 0.40·M ＋ 0.25·N</div>
+      <div class="sub">三個面向 <span class="src lit">文獻</span>［3, 9］　權重 0.35 / 0.40 / 0.25 <span class="src asm">本工具假設</span></div>
+      <ul class="fl">
+        <li><b>C</b> 對比分數（LM density）、<b>M</b> 運動分數（心率）、<b>N</b> 雜訊分數（Aortic root SD），各 0–100</li>
+        <li>① 上限：S ≤ min(C, M, N) ＋ 35 <span class="src asm">本工具假設</span></li>
+        <li>② 年齡：65–74 歲 −2；≥75 歲 −4 <span class="src mix">文獻方向・數值假設</span>（鈣化影響品質 [3]）</li>
+        <li>③ 四捨五入後換成評分（切點 85 / 70 / 50）<span class="src asm">本工具假設</span>：</li>
+      </ul>
+      <div class="gl"><span style="background:var(--g4)">≥85 → 4</span><span style="background:var(--g3)">70–84 → 3</span><span style="background:var(--g2)">50–69 → 2</span><span style="background:var(--g1)">&lt;50 → 1</span></div>
+      <div class="sub">範例：C 100、M 73、N 85 → 0.35×100 + 0.40×73 + 0.25×85 = 35.0 + 29.2 + 21.3 = 85.5；最差項 73+35 = 108 未觸發上限；年齡 58 不扣分 → S = 85 → 評分 4</div>
+    </div>
+    <p class="hint">每位受檢者的實際計算可在預測結果的「計算過程」展開查看。各分數的對照表與曲線見下方。</p>
+    <p>總分（0–100）由三個面向組成，依文獻常用的閾值設計成規則式模型：</p>
+    <ul class="notes">
+      <li><b>對比強化（權重 35% <span class="src asm">本工具假設</span>）</b>：以 LM density 為主。325–500 HU 為最佳區間 [6,7]；300–325 HU 略扣分；250 HU 以下明顯扣分；&gt;500 HU 輕度扣分（鈣化易低估/blooming）[7]。LM/Aorta 比值 &lt;0.85 另扣分。</li>
+      <li><b>對比劑注射</b>：有實測 HU 時以實測為準，注射參數只用來產生建議；掃描前未填 HU 時，依 IDR、kVp、體重與注射時間預估 Aortic root 與 LM HU（強化與 IDR 成正比、與體重成反比、kVp 越低碘的 HU 越高 [5]）。IDR 建議下限隨 kVp 調整：120 kVp 約 1.6、100 kVp 約 1.4、80 kVp 約 1.2、70 kVp 約 1.0 gI/s [8,10]。</li>
+      <li><b>品質不佳風險示警</b>：由院內校正模型算出評分 ≤2 的機率，超過門檻即示警；門檻預設由 5 折交叉驗證結果自動選擇，以達到目標敏感度（預設 80%），並同時報告特異度、陽性預測值與 AUC <span class="src asm">本工具假設</span>（方法為常用統計做法，門檻依貴院資料決定）。</li>
+      <li><b>院內校正模型</b>：資料量足夠後（≥100 筆有評分；評分 ≤2 為 20–49 筆屬初步、≥50 筆較可靠），以比例勝算邏輯迴歸用貴院資料重新估計 C、M、N 的權重（另加年齡、性別）與評分切點，並以 5 折交叉驗證和規則比較；預設自動採用加權 Kappa 較高者。設定與係數見「資料庫」頁。</li>
+      <li><b>掃描前模式</b>：只需身高、體重、年齡、靜止心跳、contrast volume / injection rate。kVp 依 BMI 與體重自動建議（BMI &lt;21→80；BMI ≤30 或體重 ≤90 kg→100；其餘→120 kVp）[12–15]，protocol 未定時四種都算一次並列出分數；Aortic HU、LM HU 與雜訊皆為估計值。年齡 ≥65 歲因鈣化機率較高略扣分 [3]，並在估算強化時納入年齡（年長者心輸出量較低、強化較高 [5]）。</li>
+      <li><b>心臟運動（權重 40% <span class="src asm">本工具假設</span>）</b>：依 protocol 設定心率門檻（理想上限 / 可接受上限）——Prospective 60/75、Retrospective 65/85、High-pitch 60/65、Wide-detector 65/80 bpm [1–4, 12, 16–18]。心率變異 &gt;10 bpm 與心律不整再依 protocol 敏感度扣分 [3]。</li>
+      <li><b>雜訊 / 體型（權重 25% <span class="src asm">本工具假設</span>）</b>：有輸入 Aortic root SD 就直接使用；否則以 BMI 與 kVp 估算（BMI 25、100 kVp 約 25 HU）[3]。SD ≤25 HU 滿分、35 HU 約 75 分、≥45 HU 接近最低分（參考 NoiseNet 各品質組的雜訊分布 [9]）。</li>
+    </ul>
+    <p>總分 = 加權平均，但不超過「最差面向 + 35 分」，避免單一嚴重問題（如高心率）被其他好條件掩蓋。</p>
+    <table style="margin-top:8px">
+      <tr><th>總分 <span class="src asm">本工具假設</span></th><th>評分</th><th>意義（四分制 <span class="src lit">文獻</span>［2, 13］）</th></tr>
+      <tr><td>≥85</td><td><span class="pill" style="background:var(--g4)">4</span></td><td>優良，無明顯偽影</td></tr>
+      <tr><td>70–84</td><td><span class="pill" style="background:var(--g3)">3</span></td><td>良好，輕微偽影，可完整診斷</td></tr>
+      <tr><td>50–69</td><td><span class="pill" style="background:var(--g2)">2</span></td><td>尚可，部分節段受限</td></tr>
+      <tr><td>&lt;50</td><td><span class="pill" style="background:var(--g1)">1</span></td><td>不佳，可能無法診斷</td></tr>
+    </table>
+    <p class="sub">四分制（4 = excellent、3 = good、2 = adequate、1 = nondiagnostic）是冠狀動脈 CTA 研究常用的影像品質量表，例如 PROTECTION II［13］與 PROTECTION VI 心率分析［2］。各級的中文描述為本工具的意譯 <span class="src mix">文獻方向・數值假設</span>；「總分 → 評分」的分界 <span class="src asm">本工具假設</span>。<b>注意方向：</b>部分研究的量表方向相反（1 = 無偽影、4 = 無法判讀，例如［4］），匯入 CSV 時請統一為 4 = 最佳；貴院也應事先定義是以「整體」或「最差節段」評分，並固定由同一標準評分，校正模型才有意義。</p>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <h2>各項分數對照</h2>
+    <div class="fgrid">
+      <div class="fbox">
+        <h3>C 對比分數 ＝ f(LM HU) − 比值懲罰</h3>
+        <p class="sub">325–500 HU 最佳區間 <span class="src lit">文獻</span>［6, 7］；&gt;500 HU 扣分 <span class="src mix">文獻方向・數值假設</span>［7］；其他分界點與分數 <span class="src asm">本工具假設</span></p>
+        <div id="cvC"></div>
+        <table><tr><th>LM HU</th><td>&lt;150</td><td>200</td><td>250</td><td>300</td><td>325–500</td><td>600</td><td>800</td></tr>
+          <tr><th>C</th><td>10</td><td>40</td><td>65</td><td>85</td><td><b>100</b></td><td>85</td><td>65</td></tr></table>
+        <p class="sub">兩點之間線性內插 <span class="src asm">本工具假設</span>。比值懲罰：LM/Aorta &lt;0.70 扣 25；0.70–0.85 扣 12；≥0.85 不扣 <span class="src asm">本工具假設</span>。</p>
+      </div>
+      <div class="fbox">
+        <h3>M 運動分數 ＝ f(HR) − 心率變異 − 心律不整</h3>
+        <p class="sub">各 protocol 理想上限（100 分）<span class="src lit">文獻</span>［2, 4, 12］　可接受上限（50 分）<span class="src mix">文獻方向・數值假設</span>　10 分點、HRV 係數、心律不整扣分 <span class="src asm">本工具假設</span>（逐項依據見下方 Protocol 表）</p>
+        <div id="cvM"></div>
+        <div class="tw"><table><tr><th>Protocol</th><th>100 分</th><th>50 分</th><th>10 分</th><th>HRV 係數</th><th>心律不整</th></tr>
+          <tr><td>Prospective</td><td>≤60</td><td>75</td><td>90</td><td>1.0</td><td>−30</td></tr>
+          <tr><td>Retrospective</td><td>≤65</td><td>85</td><td>100</td><td>0.5</td><td>−15</td></tr>
+          <tr><td>High-pitch</td><td>≤60</td><td>65</td><td>80</td><td>1.4</td><td>−45</td></tr>
+          <tr><td>Wide-detector</td><td>≤65</td><td>80</td><td>95</td><td>0.8</td><td>−25</td></tr></table></div>
+        <p class="sub">心率（bpm）兩點之間線性內插。心率變異扣分 = (HRV − 5) ÷ 15 × 25 × HRV 係數（HRV ≤5 不扣，≥20 扣滿）。</p>
+      </div>
+      <div class="fbox">
+        <h3>N 雜訊分數 ＝ f(Aortic root SD)</h3>
+        <p class="sub">分界 <span class="src mix">文獻方向・數值假設</span>（參考 NoiseNet 各品質組的雜訊中位數 33 / 36 / 42 HU［9］；雜訊絕對值隨機型與重建法而異）</p>
+        <div id="cvN"></div>
+        <table><tr><th>SD (HU)</th><td>≤25</td><td>35</td><td>45</td><td>≥55</td></tr>
+          <tr><th>N</th><td><b>100</b></td><td>75</td><td>30</td><td>5</td></tr></table>
+        <p class="sub">未輸入 SD 時估算：SD ≈ 25 × e<sup>0.035 × (BMI − 25)</sup> × kV 係數 × 性別係數（女 0.92；男或未填 1.00）</p>
+        <p class="sub">BMI 越高雜訊越高 <span class="src mix">文獻方向・數值假設</span>［3］；指數 0.035 與基準 25 HU <span class="src asm">本工具假設</span>；kV 係數方向 <span class="src mix">文獻方向・數值假設</span>；女性雜訊較低 <span class="src mix">文獻方向・數值假設</span>［3］</p>
+        <table><tr><th>kVp</th><td>70</td><td>80</td><td>90</td><td>100</td><td>120</td><td>140</td></tr>
+          <tr><th>kV 係數</th><td>1.45</td><td>1.30</td><td>1.15</td><td>1.00</td><td>0.85</td><td>0.75</td></tr></table>
+      </div>
+      <div class="fbox">
+        <h3>掃描前：HU 估算</h3>
+        <p class="sub">與 IDR 成正比 <span class="src mix">文獻方向・數值假設</span>［5, 6］　與體重成反比 <span class="src mix">文獻方向・數值假設</span>（文獻為反比，本工具指數取 0.7）［5］　基準 340 HU <span class="src asm">本工具假設</span>　kV<sub>HU</sub> <span class="src mix">文獻方向・數值假設</span>（80/100 kV 比值 1.21，對照 RCT 實測約 1.27［14］）　時間係數 <span class="src mix">文獻方向・數值假設</span>［5］　年齡係數 <span class="src mix">文獻方向・數值假設</span>（以年齡代表心輸出量）　LM = 0.92 × Aorta <span class="src asm">本工具假設</span></p>
+        <p class="sub" style="font-size:13.5px"><b>Aorta HU ≈ 340 × (IDR ÷ 1.6) × kV<sub>HU</sub> × (75 ÷ 體重)<sup>0.7</sup> × 時間係數 × 年齡係數</b><br><b>LM HU ≈ 0.92 × Aorta HU</b>　　IDR = 速率 × 濃度 ÷ 1000</p>
+        <table><tr><th>kVp</th><td>70</td><td>80</td><td>90</td><td>100</td><td>120</td><td>140</td></tr>
+          <tr><th>kV<sub>HU</sub></th><td>1.65</td><td>1.45</td><td>1.32</td><td>1.20</td><td>1.00</td><td>0.88</td></tr></table>
+        <p class="sub">時間係數：注射時間 ≤5 秒 0.75 → ≥10 秒 1.00。年齡係數：≤40 歲 0.92 → ≥80 歲 1.08（中間線性內插）。kVp 自動建議依據見下方。</p>
+      </div>
+      <div class="fbox" style="grid-column:1/-1">
+        <h3>Protocol 自動建議與依據</h3>
+        <p class="sub" style="font-size:13.5px"><b>做法：</b>protocol 選「未定」時，用目前輸入的心率、心率變異、心律不整，把四種 protocol 各算一次總分 S，建議分數最高者；分數相同時選輻射劑量較低者（High-pitch ＜ Wide-detector ＜ Prospective ＜ Retrospective）[4, 12, 18]。</p>
+        <div class="tw"><table>
+          <tr><th>Protocol</th><th>理想上限<br>(M=100)</th><th>可接受上限<br>(M=50)</th><th>依據</th></tr>
+          <tr><td>Prospective</td><td>60</td><td>75</td><td style="white-space:normal">SCCT 2011：穩定竇性心律、心率通常 &lt;60–65 bpm 時用 prospective（數值依機型而定）[12]；PROTECTION VI：心率 &lt;60 品質最佳，&gt;75 建議 β-blocker，60–75 需審慎評估 [2]</td></tr>
+          <tr><td>High-pitch</td><td>60</td><td>65</td><td style="white-space:normal">驗證研究收案條件為穩定竇性心律且 ≤60 bpm [4]；臨床經驗報告中心率升到 61–63 bpm 時部分血管需補掃 [19]。65 為本工具的保守設定</td></tr>
+          <tr><td>Wide-detector</td><td>65</td><td>80</td><td style="white-space:normal">320 列 CT 在心率 ≤65 時劑量與品質最佳，&gt;65 時劑量上升 [16, 18]；心率是影響品質的主要因素，心率變異影響不顯著 [17]（故 HRV 係數較低）。80 為本工具假設</td></tr>
+          <tr><td>Retrospective</td><td>65</td><td>85</td><td style="white-space:normal">SCCT 2011：心律不規則或心率高、不適合 prospective 時使用，但劑量較高 [12]；臨床分流例：&gt;80 bpm 或心律不整改用 retrospective [19]。65/85 為本工具假設</td></tr>
+        </table></div>
+        <p class="sub">心律不整扣分（−15 至 −45）與 HRV 係數（0.5–1.4）是本工具依各 protocol 對不規則心律敏感度所做的相對假設，文獻沒有直接給出這些數值。實際門檻也取決於機型的時間解析度（SCCT 指引註明數值依機型而定）[12]，建議累積院內資料後，依「資料庫預測能力」的結果調整。</p>
+      </div>
+      <div class="fbox" style="grid-column:1/-1">
+        <h3>kVp 自動建議與依據</h3>
+        <div class="tw"><table>
+          <tr><th>條件</th><th>建議</th><th>依據</th></tr>
+          <tr><td>BMI &lt;21</td><td><b>80 kV</b></td><td style="white-space:normal">2018 ACC/HRS/NASCI/SCAI/SCCT 共識文件舉例：BMI &lt;21 用 80 kV [15]；另有多中心 RCT 顯示 BMI &lt;25 時 80 kV 影像品質不劣於 100 kV、劑量約減半 [14]</td></tr>
+          <tr><td>BMI ≤30 或<br>體重 ≤90 kg</td><td><b>100 kV</b></td><td style="white-space:normal">SCCT 2011 劑量指引：體重 ≤90 kg 或 BMI ≤30 可考慮 100 kV [12]；PROTECTION II 隨機試驗（&lt;90 kg 或 BMI &lt;30）100 kV 影像品質不劣於 120 kV [13]</td></tr>
+          <tr><td>BMI &gt;30 且<br>體重 &gt;90 kg</td><td><b>120 kV</b></td><td style="white-space:normal">SCCT 2011 劑量指引：體重 &gt;90 kg 且 BMI &gt;30 通常用 120 kV [12]</td></tr>
+        </table></div>
+        <p class="sub">本工具採較保守的 80 kV 門檻（BMI &lt;21）；若貴院經驗或機型支援，BMI 21–25 也可考慮 80 kV [14]。新一代機型（如第三代雙源 CT）的自動 kV 選擇（CARE kV、kV Assist 等）可在較胖的病人使用 70–80 kV；機器有自動選擇時請以機器建議為準，並在表單手動選擇實際使用的 kVp。</p>
+      </div>
+      <div class="fbox" style="grid-column:1/-1">
+        <h3>綜合預測（資料庫比對時）</h3>
+        <p class="sub">相似案例（k 近鄰）為常用方法；距離尺度、K = 7、權重公式 <span class="src asm">本工具假設</span></p>
+        <p class="sub" style="font-size:13.5px"><b>綜合評分 = 四捨五入[(1 − w) × 規則評分 ＋ w × 相似案例加權平均]</b><br>
+        <b>w = min(0.7, n ÷ 40) × min(1, 平均相似度 ÷ 0.6)</b>　n = 資料庫中有實際評分的筆數</p>
+        <p class="sub">取最相似的 7 筆；每筆權重 = 1 ÷ (d + 0.3)；相似度 = e<sup>−d/2</sup>。距離 d = √(平均[(差值 ÷ 尺度)²])，尺度：BMI 3、心率 5、心率變異 5、kVp 20、LM 50 HU、Aorta 60 HU、SD 5 HU、IDR 0.3、年齡 8、contrast volume 10 mL；protocol 不同計 1.5、心律不整不同計 2。掃描前只比對掃描前就有的項目。</p>
+      </div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <h2>量測定義</h2>
+    <ul class="notes">
+      <li><b>Aortic root density</b>：LM 開口高度軸切面，升主動脈根部圓形 ROI（約 1–2 cm²，避開管壁、鈣化、streak）之平均 HU [9,11]。</li>
+      <li><b>Aortic root SD（image noise）</b>：同一 ROI 內 CT 值的標準差 (HU)，建議連續 3 層取平均 [9,11]。受 kernel、重建法（FBP/IR/DL）、ROI 大小影響，跨機型或跨重建條件比較時需注意。</li>
+      <li><b>LM density</b>：LM 管腔中央小 ROI（約 1–2 mm²，不碰管壁/斑塊）之平均 HU。</li>
+      <li><b>SNR</b> = Aortic root HU ÷ SD；<b>CNR</b> = (血管 HU − 血管周圍脂肪 HU) ÷ SD [11]。</li>
+      <li><b>IDR</b> (gI/s) = 注射速率 (mL/s) × 濃度 (mgI/mL) ÷ 1000；<b>總碘量</b> (gI) = 總量 × 濃度 ÷ 1000；<b>注射時間</b> (s) = 總量 ÷ 速率。</li>
+    </ul>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <h2>參考資料來源</h2>
+    <ol class="refs">
+      <li>Abbara S, et al. SCCT guidelines for the performance and acquisition of coronary computed tomographic angiography. <i>J Cardiovasc Comput Tomogr</i> 2016;10(6):435–449. <a href="https://doi.org/10.1016/j.jcct.2016.10.002">doi:10.1016/j.jcct.2016.10.002</a></li>
+      <li>Stocker TJ, et al. Influence of heart rate on image quality and radiation dose exposure in coronary CT angiography. <i>Radiology</i> 2021;300(3):701–703. <a href="https://doi.org/10.1148/radiol.2021210245">doi:10.1148/radiol.2021210245</a></li>
+      <li>Stocker TJ, et al. Impact of dose reduction strategies on image quality of coronary CTA in real-world clinical practice: a subanalysis of PROTECTION VI. <i>AJR</i> 2021;217(6):1344–1352. <a href="https://doi.org/10.2214/AJR.21.26007">doi:10.2214/AJR.21.26007</a></li>
+      <li>Achenbach S, et al. Coronary CT angiography with a consistent dose below 1 mSv using prospectively ECG-triggered high-pitch spiral acquisition. <i>Eur Heart J</i> 2010;31(3):340–346. <a href="https://doi.org/10.1093/eurheartj/ehp470">doi:10.1093/eurheartj/ehp470</a></li>
+      <li>Bae KT. Intravenous contrast medium administration and scan timing at CT: considerations and approaches. <i>Radiology</i> 2010;256(1):32–61. <a href="https://doi.org/10.1148/radiol.10090908">doi:10.1148/radiol.10090908</a></li>
+      <li>Mihl C, et al. Contrast media administration in coronary computed tomography angiography – a systematic review. <i>Fortschr Röntgenstr</i> 2017;189:312–325. <a href="https://doi.org/10.1055/s-0042-121609">doi:10.1055/s-0042-121609</a></li>
+      <li>Eijsvoogel NG, et al. Personalization of CM injection protocols in coronary CTA (People CT Trial). <i>Contrast Media Mol Imaging</i> 2020. <a href="https://doi.org/10.1155/2020/5407936">doi:10.1155/2020/5407936</a></li>
+      <li>Kok M, et al. Optimizing contrast media application in coronary CT angiography at lower tube voltage: evaluation in a circulation phantom and sixty patients. <i>Eur J Radiol</i> 2016;85(6):1068–1074.</li>
+      <li>Palmquist E, et al. NoiseNet, a fully automatic noise assessment tool that can identify non-diagnostic CCTA examinations. <i>Int J Cardiovasc Imaging</i> 2024. <a href="https://doi.org/10.1007/s10554-024-03130-x">doi:10.1007/s10554-024-03130-x</a></li>
+      <li>Personalized administration of contrast medium with high delivery rate in low tube voltage CCTA（指出 CCTA 一般建議 IDR 1.5–2.0 gI/s）. <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC6511728">PMC6511728</a></li>
+      <li>Fat volume measurements as a predictor of image noise in CCTA（aortic root 1 cm² ROI 之 SD 定義為 noise，取 3 層平均）. <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC6289940">PMC6289940</a></li>
+      <li>Halliburton SS, et al. SCCT guidelines on radiation dose and dose-optimization strategies in cardiovascular CT. <i>J Cardiovasc Comput Tomogr</i> 2011;5(4):198–224. <a href="https://doi.org/10.1016/j.jcct.2011.06.001">doi:10.1016/j.jcct.2011.06.001</a></li>
+      <li>Hausleiter J, et al. Image quality and radiation exposure with a low tube voltage protocol for coronary CT angiography: results of the PROTECTION II trial. <i>JACC Cardiovasc Imaging</i> 2010;3(11):1113–1123. <a href="https://doi.org/10.1016/j.jcmg.2010.08.016">doi:10.1016/j.jcmg.2010.08.016</a></li>
+      <li>LaBounty TM, et al. Coronary CT angiography of patients with a normal body mass index using 80 kVp versus 100 kVp: a prospective, multicenter, multivendor randomized trial. <i>AJR</i> 2011;197(5):W860–W867.</li>
+      <li>Hirshfeld JW Jr, et al. 2018 ACC/HRS/NASCI/SCAI/SCCT expert consensus document on optimal use of ionizing radiation in cardiovascular imaging: best practices for safety and effectiveness. <i>J Am Coll Cardiol</i> 2018;71(24):e283–e351. <a href="https://doi.org/10.1016/j.jacc.2018.02.016">doi:10.1016/j.jacc.2018.02.016</a></li>
+      <li>Fujimoto S, et al. Image quality and radiation dose stratified by patient heart rate for coronary 64- and 320-MDCT angiography. <i>AJR</i> 2013;200(4):765–770.</li>
+      <li>Sun G, et al. 320-detector row CT coronary angiography: effects of heart rate and heart rate variability on image quality, diagnostic accuracy and radiation exposure. <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC3587067">PMC3587067</a></li>
+      <li>Khan A, et al. Comparison of radiation dose and image quality: 320-MDCT versus 64-MDCT coronary angiography. <i>AJR</i> 2011;197(1):163–168. <a href="https://doi.org/10.2214/AJR.10.5250">doi:10.2214/AJR.10.5250</a></li>
+      <li>DeZordo T, et al. 依心率分流 high-pitch / adaptive sequence / retrospective 的臨床經驗（RSNA 2010 研討會報告；AuntMinnie 報導）. <a href="https://www.auntminnie.com/clinical-news/ct/article/15598053/high-pitch-ct-cuts-dose-for-patients-with-low-heart-rates">AuntMinnie</a></li>
+    </ol>
+    <p class="foot">此工具為規則式估算，閾值依一般文獻與臨床經驗設定，未經特定機型或院內資料驗證，僅供品質管理與研究參考，不作為臨床診斷依據。建議在「實際品質評分」欄填入閱片結果，累積紀錄後可在「紀錄 / 批次」頁看到預測與實際的一致性，再據以調整閾值。所有資料只存在你這台裝置的瀏覽器中，不會上傳。</p>
+  </div>
+</section>
+</main>
+
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+const GRADE=[null,
+ {t:'不佳',d:'可能無法診斷',c:'var(--g1)'},
+ {t:'尚可',d:'部分節段受限',c:'var(--g2)'},
+ {t:'良好',d:'可完整診斷',c:'var(--g3)'},
+ {t:'優良',d:'無明顯偽影',c:'var(--g4)'}];
+const PROTO={
+  prospective:{name:'Prospective',exc:60,lim:75,hrvW:1,arrP:30},
+  retrospective:{name:'Retrospective',exc:65,lim:85,hrvW:.5,arrP:15},
+  highpitch:{name:'High-pitch',exc:60,lim:65,hrvW:1.4,arrP:45},
+  wide:{name:'Wide-detector',exc:65,lim:80,hrvW:.8,arrP:25}
+};
+const KVF={70:1.45,80:1.3,90:1.15,100:1,120:.85,140:.75};
+const lerp=(x,x0,x1,y0,y1)=>y0+(Math.min(Math.max(x,x0),x1)-x0)/(x1-x0)*(y1-y0);
+const clamp=v=>Math.max(0,Math.min(100,v));
+const num=v=>{if(v===''||v==null)return null;const n=parseFloat(v);return isNaN(n)?null:n};
+
+const KVHU={70:1.65,80:1.45,90:1.32,100:1.2,120:1,140:.88};      // 碘 HU 相對 120 kVp
+const IDRMIN={70:1.0,80:1.2,90:1.3,100:1.4,120:1.6,140:1.8};     // 建議 IDR 下限 (gI/s)
+function injection(d){
+  if(!(d.rate>0&&d.conc>0))return null;
+  const idr=d.rate*d.conc/1000;
+  const r={idr};
+  if(d.vol>0){r.tid=d.vol*d.conc/1000;r.dur=d.vol/d.rate;if(d.weight>0)r.mgkg=r.tid*1000/d.weight;}
+  return r;
+}
+function estimateHU(d,inj){
+  const kvp=kvOf(d,d.weight/Math.pow(d.height/100,2));
+  let ao=340*(inj.idr/1.6)*(KVHU[kvp]||1)*Math.pow(75/d.weight,.7);
+  if(inj.dur!=null)ao*=lerp(inj.dur,5,10,.75,1);
+  if(d.age>0)ao*=lerp(d.age,40,80,.92,1.08);   // 年長者心輸出量較低→強化較高
+  return {ao:Math.round(ao),lm:Math.round(ao*.92)};
+}
+// kVp 自動建議（依據見評分方法頁 [12–15]）：
+//  BMI <21 → 80 kV（2018 ACC/SCCT 等共識舉例；BMI <25 的 RCT 亦支持 80 kV 可行）
+//  BMI ≤30 或 體重 ≤90 kg → 100 kV（SCCT 2011 劑量指引；PROTECTION II）
+//  BMI >30 且 體重 >90 kg → 120 kV（SCCT 2011）
+function autoKvp(bmi,wt){if(bmi<21)return 80;if(bmi<=30||(wt>0&&wt<=90))return 100;return 120;}
+function kvOf(d,bmi){const k=+d.kvp;return k>0?k:autoKvp(bmi,d.weight);}
+function autoOrder(d){
+  // 依心率/心律排列可用 protocol（由最適合開始）
+  return ['highpitch','wide','prospective','retrospective'];
+}
+function predict(d){
+  const bmi=d.weight/Math.pow(d.height/100,2);
+  if(d.protocol&&d.protocol!=='auto'&&PROTO[d.protocol])return predictOne(d,d.protocol);
+  const alts=Object.keys(PROTO).map(k=>({k,r:predictOne(d,k)}));
+  // 分數相同時偏好劑量較低者：highpitch > wide > prospective > retrospective
+  const pref={highpitch:0,wide:1,prospective:2,retrospective:3};
+  alts.sort((a,b)=>(b.r.total-a.r.total)||(pref[a.k]-pref[b.k]));
+  const best=alts[0].r;best.auto=true;best.alts=alts;
+  return best;
+}
+// ===== 評分子函數（評分、計算過程、評分方法頁的曲線都用這幾個）=====
+function fLM(lm){   // 對比分數 C0：LM density → 0–100
+  if(lm<150)return 10;if(lm<200)return lerp(lm,150,200,10,40);if(lm<250)return lerp(lm,200,250,40,65);
+  if(lm<300)return lerp(lm,250,300,65,85);if(lm<325)return lerp(lm,300,325,85,100);
+  if(lm<=500)return 100;if(lm<=600)return lerp(lm,500,600,100,85);return lerp(lm,600,800,85,65);
+}
+function ratioPen(r){return r<.7?25:r<.85?12:0;}
+function fHR(hr,p){ // 運動分數 M0：心率 → 0–100（依 protocol 的理想/可接受上限）
+  if(hr<=p.exc)return 100;if(hr<=p.lim)return lerp(hr,p.exc,p.lim,100,50);return lerp(hr,p.lim,p.lim+15,50,10);
+}
+function hrvPen(hrv,p){return hrv!=null&&hrv>5?lerp(hrv,5,20,0,25)*p.hrvW:0;}
+function fSD(sd){   // 雜訊分數 N：Aortic root SD → 0–100
+  return sd<=25?100:sd<=35?lerp(sd,25,35,100,75):sd<=45?lerp(sd,35,45,75,30):lerp(sd,45,55,30,5);
+}
+const SEXF={F:.92,M:1};   // 女性 SNR 較高（PROTECTION VI 多變項分析 [3]）；0.92 為本工具的近似值
+function sdEst(bmi,kvp,sex){return 25*Math.exp(.035*(bmi-25))*(KVF[kvp]||1)*(SEXF[sex]||1);}
+function agePen(age){return age>=75?4:age>=65?2:0;}
+function gradeOf(t){return t>=85?4:t>=70?3:t>=50?2:1;}
+const WC=.35,WM=.40,WN=.25,CAP=35;
+function predictOne(d,proto){
+  const notes=[];const d0kvp=d.kvp;
+  const bmi=d.weight/Math.pow(d.height/100,2);
+  const p=PROTO[proto];
+  const kvp=kvOf(d,bmi);
+  d={...d,protocol:proto,kvp};
+  // --- injection
+  const inj=injection(d);let huEst=false;
+  let ao=d.ao, lm=d.lm;
+  if(inj){
+    const lo=IDRMIN[kvp]||1.4;
+    if(inj.idr<lo-0.05)notes.push(['warn',`IDR ${inj.idr.toFixed(2)} gI/s 低於 ${kvp} kVp 建議下限約 ${lo} gI/s，強化可能不足：提高注射速率或改用較高濃度。`]);
+    else if(inj.idr>lo+0.8)notes.push(['',`IDR ${inj.idr.toFixed(2)} gI/s 相對 ${kvp} kVp 偏高，可能 >500 HU；可考慮降低速率或對比劑量。`]);
+    if(inj.dur!=null){
+      if(inj.dur<8)notes.push(['warn',`注射時間僅 ${inj.dur.toFixed(1)} 秒，bolus 短，觸發時間誤差容忍度低。`]);
+      else if(inj.dur>20&&d.protocol!=='retrospective')notes.push(['',`注射時間 ${inj.dur.toFixed(1)} 秒，以 ${p.name} 的短掃描時間而言，對比劑量可能可再減少。`]);
+    }
+    if(inj.mgkg!=null&&inj.mgkg>500)notes.push(['',`碘劑量 ${Math.round(inj.mgkg)} mgI/kg 偏高，腎功能不佳者需留意。`]);
+    if(!(ao>0&&lm>0)){const e=estimateHU(d,inj);ao=e.ao;lm=e.lm;huEst=true;
+      notes.unshift(['',`尚未輸入實測 HU，Aortic root ≈ ${ao}、LM ≈ ${lm} HU 為依注射參數的粗估值，實際受心輸出量與觸發時間影響很大。`]);}
+  }
+  // --- contrast
+  const c0=fLM(lm);let c=c0;
+  const ratio=ao>0?lm/ao:1,rp=ratioPen(ratio);c-=rp;
+  if(ratio<.7){notes.push(['warn',`LM/Aorta 比值 ${ratio.toFixed(2)}，近端衰減明顯下降，請確認量測位置或是否有部分容積/狹窄影響。`]);}
+  else if(ratio<.85){notes.push(['',`LM/Aorta 比值 ${ratio.toFixed(2)}，略低於理想 (≥0.85)。`]);}
+  if(lm<250)notes.push(['warn',`LM ${lm} HU 低於 250 HU，強化不足：檢查 bolus timing、注射速率/碘流率，或考慮降低 kVp。`]);
+  else if(lm<300)notes.push(['',`LM ${lm} HU 可接受，但低於 325 HU 的理想下限。`]);
+  if(lm>500)notes.push(['',`LM ${lm} HU 偏高（>500 HU），鈣化斑可能被低估或 blooming 干擾判讀。`]);
+  if(ao<250)notes.push(['warn',`Aortic root ${ao} HU 偏低，可能為觸發時間過早或過晚。`]);
+  c=clamp(c);
+  // --- motion
+  const hr=d.hr,m0=fHR(hr,p),hp=hrvPen(d.hrv,p),ap=d.arr?p.arrP:0;let m=m0-hp-ap;
+  if(d.hrv!=null&&d.hrv>5){
+    if(d.hrv>10)notes.push(['warn',`心率變異 ${d.hrv} bpm 偏大，${p.name} 對此${p.hrvW>=1?'敏感':'較耐受'}。`]);}
+  if(d.arr){notes.push(['warn',`心律不整：${d.protocol==='highpitch'||d.protocol==='prospective'?'建議改用 retrospective gating 或加大 padding / 心律不整偵測。':'可用 ECG editing 及多相位重建補救。'}`]);}
+  if(hr>p.exc){
+    let s=`心率 ${hr} bpm 高於 ${p.name} 理想上限 ${p.exc} bpm`;
+    if(hr>p.lim)s+=`，且超過可接受上限 ${p.lim} bpm，運動偽影風險高。`;else s+='。';
+    if(d.protocol==='highpitch'||d.protocol==='prospective')s+=' 可考慮 β-blocker、改用 retrospective，或加大 padding 並重建收縮末期相位。';
+    else s+=' 可考慮 β-blocker 或多相位重建（如收縮末期 ~40–45%）。';
+    notes.push([hr>p.lim?'warn':'',s]);
+  }
+  m=clamp(m);
+  // --- noise
+  let noise=d.noise, est=false;
+  if(noise==null){noise=sdEst(bmi,kvp,d.sex);est=true;}
+  let n=fSD(noise);
+  n=clamp(n);
+  if(bmi>=30&&kvp<=90)notes.push(['warn',`BMI ${bmi.toFixed(1)} 搭配 ${kvp} kVp，雜訊可能偏高；建議 100–120 kVp 或提高 mAs。`]);
+  if(bmi<23&&kvp>=120)notes.push(['',`BMI ${bmi.toFixed(1)} 偏瘦，${kvp} kVp 可考慮降至 80–100 kVp 以提升對比並降低劑量。`]);
+  if(noise>38)notes.push(['warn',`Aortic root 雜訊${est?'（估算）':''} ${noise.toFixed(1)} HU 偏高，可考慮 iterative / DL 重建或提高劑量。`]);
+  // --- total
+  const sum=WC*c+WM*m+WN*n,worst=Math.min(c,m,n),capped=Math.min(sum,worst+CAP),agp=agePen(d.age);
+  let total=capped-agp;
+  if(d.age>=65){
+    notes.push(['',`年齡 ${d.age} 歲，冠狀動脈鈣化機率較高，鈣化斑 blooming 可能影響狹窄判讀。`]);}
+  if(d.age>0&&d.age<40&&huEst)notes.push(['',`年齡 ${d.age} 歲，心輸出量通常較高，對比劑稀釋較快，實際強化可能低於估計。`]);
+  total=Math.round(clamp(total));
+  const grade=gradeOf(total);
+  const bk={lm,c0,ratio,rp,c,hr,m0,hp,ap,m,noise,n,sum,worst,capped,agp,total,grade,p,sex:d.sex};
+  if(!notes.length)notes.push(['','各項參數均在理想範圍內。']);
+  const snr=noise>0?ao/noise:null;
+  return {bmi,c:Math.round(c),m:Math.round(m),n:Math.round(n),total,grade,noise,est,snr,ratio,notes,ao,lm,huEst,inj,protocol:proto,kvp,kvAuto:!(+d0kvp>0),bk};
+}
+
+// ------------- form
+const F=$('#f');
+let mode='pre';var PERF_READY=false;
+function setMode(m){mode=m;
+  document.querySelectorAll('#mode button').forEach(b=>b.classList.toggle('on',b.dataset.m===m));
+  document.querySelectorAll('.post-only').forEach(x=>x.classList.toggle('hidden',m!=='post'));
+  $('#hrlab').textContent=m==='pre'?'靜止心跳 (bpm)':'掃描時心率 (bpm)';
+  if(window.__renderPerf&&PERF_READY)window.__renderPerf();
+}
+document.querySelectorAll('#mode button').forEach(b=>b.onclick=()=>{setMode(b.dataset.m);render();});
+function readForm(){
+  const g=k=>F.elements[k].value;const post=mode==='post';
+  return {id:g('id').trim(),req:g('req').trim(),height:num(g('height')),weight:num(g('weight')),age:num(g('age')),sex:g('sex')||null,
+    hr:num(g('hr')),hrv:num(g('hrv')),arr:F.elements.arr.checked,protocol:g('protocol'),
+    kvp:g('kvp')==='auto'?'auto':+g('kvp'),conc:num(g('conc')),vol:num(g('vol')),rate:num(g('rate')),
+    ao:post?num(g('ao')):null,lm:post?num(g('lm')):null,noise:post?num(g('noise')):null,actual:num(g('actual')),
+    hrType:post?'scan':'rest'};
+}
+const ready=d=>d.height>0&&d.weight>0&&d.hr>0&&((d.ao>0&&d.lm>0)||(d.rate>0&&d.conc>0));
+function ring(v,col){
+  const r=46,C=2*Math.PI*r,o=C*(1-v/100);
+  return `<svg class="ring" viewBox="0 0 110 110"><circle cx="55" cy="55" r="${r}" fill="none" stroke="var(--line)" stroke-width="10"/>
+  <circle cx="55" cy="55" r="${r}" fill="none" stroke="${col}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${o}" transform="rotate(-90 55 55)"/>
+  <text x="55" y="62" text-anchor="middle" font-size="26" font-weight="700" fill="var(--ink)">${v}</text></svg>`;
+}
+function bar(label,v){
+  const col=v>=85?'var(--g4)':v>=70?'var(--g3)':v>=50?'var(--g2)':'var(--g1)';
+  return `<div class="bar"><div class="t"><span>${label}</span><b>${v}</b></div><div class="b"><i style="width:${v}%;background:${col}"></i></div></div>`;
+}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function injHint(d){
+  const i=injection(d);
+  if(!i){$('#inj').textContent='';return;}
+  let t=`IDR ${i.idr.toFixed(2)} gI/s`;
+  if(i.tid!=null)t+=` · 總碘量 ${i.tid.toFixed(1)} g`;
+  if(i.mgkg!=null)t+=` (${Math.round(i.mgkg)} mgI/kg)`;
+  if(i.dur!=null)t+=` · 注射時間 ${i.dur.toFixed(1)} s`;
+  $('#inj').textContent=t;
+}
+function calBlock(d,r){
+  const c=CAL[mode];if(!c||!c.model)return '';
+  const cp=calPredict(mode,r,d),G=GRADE[cp.grade],used=baseOf(mode)==='calib';
+  return `<div class="rec" style="margin-top:10px${used?'':';opacity:.8'}"><div>院內校正模型：<b style="color:${G.c}">評分 ${cp.grade} · ${G.t}</b>${used?'（目前採用）':'（僅供比較，目前採用規則）'}</div>
+    <div class="probs">${[4,3,2,1].map(g=>`<span><i style="width:${Math.round(cp.prob[g-1]*100)}%;background:${GRADE[g].c}"></i>${g} 分 ${Math.round(cp.prob[g-1]*100)}%</span>`).join('')}</div>
+    <div class="sub">模型狀態：${tierTag(c)}${!c.ok?'　僅供參考':''}</div></div>`;
+}
+function calcBlock(r){
+  const b=r.bk,f1=v=>(Math.round(v*10)/10).toString(),e=x=>x?'<span class="est">估</span>':'';
+  const neg=v=>v>0?` − ${f1(v)}`:'';
+  return `<details class="calc"><summary>計算過程</summary>
+  <table>
+   <tr><td>C 對比</td><td>f(LM ${b.lm}${e(r.huEst)}) ${f1(b.c0)}${b.rp?` − 比值懲罰 ${b.rp}（LM/Ao ${b.ratio.toFixed(2)}）`:''}</td><td><b>${f1(b.c)}</b></td></tr>
+   <tr><td>M 運動</td><td>f(HR ${b.hr}, ${b.p.name}) ${f1(b.m0)}${b.hp?neg(b.hp)+'（心率變異）':''}${b.ap?neg(b.ap)+'（心律不整）':''}</td><td><b>${f1(b.m)}</b></td></tr>
+   <tr><td>N 雜訊</td><td>f(SD ${b.noise.toFixed(1)}${e(r.est)})${r.est&&b.sex==='F'?'（含女性係數 0.92）':''}</td><td><b>${f1(b.n)}</b></td></tr>
+   <tr><td>加權</td><td>0.35×${f1(b.c)} + 0.40×${f1(b.m)} + 0.25×${f1(b.n)}</td><td><b>${f1(b.sum)}</b></td></tr>
+   <tr><td>上限</td><td>最差項 ${f1(b.worst)} + 35 = ${f1(b.worst+CAP)}${b.capped<b.sum?' → <span class="warn">被限制</span>':' → 未觸發'}</td><td><b>${f1(b.capped)}</b></td></tr>
+   ${b.agp?`<tr><td>年齡</td><td>≥${b.agp===4?75:65} 歲</td><td><b>− ${b.agp}</b></td></tr>`:''}
+   <tr class="tot"><td>總分</td><td>四捨五入 → 評分 ${b.grade}（${b.grade===4?'≥85':b.grade===3?'70–84':b.grade===2?'50–69':'<50'}）</td><td><b>${b.total}</b></td></tr>
+  </table></details>`;
+}
+function recBlock(d,r){
+  const P=PROTO[r.protocol].name;let h='<div class="rec">';
+  h+=`<div>建議條件：<b>${r.auto?P:P}</b> · <b>${r.kvp} kVp</b>${r.kvAuto?'（自動）':''}</div>`;
+  if(r.kvAuto)h+=`<div class="sub">kVp 自動規則：BMI &lt;21 → 80；BMI ≤30 或體重 ≤90 kg → 100；其餘 → 120（SCCT 2011 劑量指引、2018 ACC/SCCT 共識）。機器若有自動 kV 選擇，以機器為準。</div>`;
+  const lo=IDRMIN[r.kvp]||1.4,conc=d.conc||370;
+  h+=`<div class="sub">此 kVp 建議 IDR ≥ ${lo} gI/s，以 ${conc} mgI/mL 約需注射速率 ≥ ${(lo*1000/conc).toFixed(1)} mL/s</div>`;
+  if(d.hrType==='rest'&&d.hr>65)h+=`<div class="sub warn">靜止心跳 ${d.hr} bpm：建議先給 β-blocker（目標 ≤60–65 bpm），給藥後以新心率重新評估。</div>`;
+  else if(d.hrType==='rest')h+=`<div class="sub">以靜止心跳估算；掃描時心率可能因緊張或憋氣而改變。</div>`;
+  if(r.auto&&r.alts){
+    h+=`<table class="pt"><tr><th>Protocol</th><th>預測分數</th><th>評分</th></tr>`+
+      r.alts.map(o=>`<tr${o.k===r.protocol?' class="cur"':''}><td>${PROTO[o.k].name}</td><td>${o.r.total}</td><td><span class="pill" style="background:${GRADE[o.r.grade].c}">${o.r.grade}</span></td></tr>`).join('')+
+      `</table><div class="hint">依貴院機型可用的 protocol 選擇；High-pitch 與 Wide-detector 需特定機型。建議邏輯與文獻依據見「評分方法」頁。</div>`+(r.protocol==='retrospective'?'<div class="hint">Retrospective 對心率較耐受，但輻射劑量明顯較高；若能把心率降到 ≤65 bpm，Prospective 通常是較好的選擇。</div>':'');
+  }
+  return h+'</div>';
+}
+function render(){
+  const d=readForm();injHint(d);
+  if(!ready(d)){$('#res').innerHTML='<div class="empty">填入身高、體重、心跳與 injection rate 後即自動計算</div>';renderDB(d,null);return;}
+  const r=predict(d),G=GRADE[r.grade];renderDB(d,r);
+  $('#res').innerHTML=`
+  <div class="score">${ring(r.total,G.c)}
+    <div><div class="grade" style="color:${G.c}">規則評分 ${r.grade} · ${G.t}</div>
+    <div class="sub">${G.d}${d.id?' · '+esc(d.id):''}</div>
+    ${d.actual?`<div class="sub">實際評分：${d.actual}</div>`:''}</div></div>
+  ${riskBlock(d,r)}
+  ${calBlock(d,r)}
+  ${bar('對比強化',r.c)}${bar('心臟運動',r.m)}${bar('雜訊 / 體型',r.n)}
+  <div class="kv">
+    <div><b>${r.bmi.toFixed(1)}</b><span>BMI</span></div>
+    <div><b>${r.lm}${r.huEst?'<span class="est">估</span>':''}</b><span>LM HU</span></div>
+    <div><b>${r.ratio.toFixed(2)}</b><span>LM / Aorta</span></div>
+    <div><b>${r.noise.toFixed(1)}${r.est?'<span class="est">估</span>':''}</b><span>Aortic root SD</span></div>
+    <div><b>${r.snr?r.snr.toFixed(1):'–'}</b><span>SNR</span></div>
+    <div><b>${r.inj?r.inj.idr.toFixed(2):'–'}</b><span>IDR (gI/s)</span></div>
+  </div>
+  ${recBlock(d,r)}
+  ${calcBlock(r)}
+  <div class="sec">影響因素與建議</div>
+  <ul class="notes">${r.notes.map(([k,t])=>`<li class="${k}">${t}</li>`).join('')}</ul>`;
+}
+F.addEventListener('input',render);F.addEventListener('change',e=>{if(e.target.tagName!=='INPUT'||e.target.type==='checkbox')render();});
+F.addEventListener('submit',e=>e.preventDefault());
+$('#clear').onclick=()=>{F.reset();setEdit(null);render();$('#msg1').textContent='';};
+$('#demo').onclick=()=>{
+  const v={id:'',req:'',height:168,weight:82,age:58,hr:68,hrv:'',protocol:'auto',kvp:'auto',conc:'370',vol:60,rate:5,ao:'',lm:'',noise:'',actual:''};setMode('pre');
+  for(const k in v)F.elements[k].value=v[k];F.elements.arr.checked=false;setEdit(null);render();
+};
+
+// ------------- storage
+const KEY='ccta_iq_records_v1';let mem=[];
+function load(){try{const s=localStorage.getItem(KEY);if(s)mem=JSON.parse(s)||[];}catch(e){}return mem;}
+function store(){try{localStorage.setItem(KEY,JSON.stringify(mem));}catch(e){}IDX=null;if(window.__schedulePerf)window.__schedulePerf();}
+load();
+$('#save').onclick=()=>{
+  const d=readForm();
+  if(!ready(d)){$('#msg1').textContent='請先填齊必填欄位。';return;}
+  const i=editTs?mem.findIndex(x=>x.ts===editTs):-1;
+  if(i>=0){d.ts=editTs;mem[i]=d;store();renderList();render();$('#msg1').textContent='已更新此筆紀錄。';return;}
+  d.ts=new Date().toISOString();mem.unshift(d);store();setEdit(d.ts);renderList();render();
+  $('#msg1').textContent=`已儲存（共 ${mem.length} 筆）。`;
+};
+
+// ------------- database matching
+let editTs=null;
+function setEdit(ts){editTs=ts;$('#save').textContent=ts?'更新此筆紀錄':'儲存到紀錄';}
+function loadRecord(ts){
+  const d=mem.find(x=>x.ts===ts);if(!d)return;
+  const set=(k,v)=>{F.elements[k].value=v==null?'':v;};
+  ['id','req','height','weight','age','sex','hr','hrv','conc','vol','rate','ao','lm','noise','actual'].forEach(k=>set(k,d[k]));
+  set('protocol',d.protocol&&PROTO[d.protocol]?d.protocol:'auto');set('kvp',+d.kvp>0?String(d.kvp):'auto');
+  setMode((d.ao>0&&d.lm>0)||d.hrType==='scan'?'post':'pre');
+  F.elements.arr.checked=!!d.arr;setEdit(ts);render();
+  $('#msg1').textContent='已載入資料庫紀錄，修改後按「更新此筆紀錄」。';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function feat(d,r){
+  r=r||predict(d);
+  return {bmi:r.bmi,hr:d.hr,hrv:d.hrv==null?3:d.hrv,arr:d.arr?1:0,protocol:r.protocol,kvp:r.kvp,age:d.age||null,sex:d.sex||null,
+    lm:r.lm,ao:r.ao,noise:r.noise,idr:r.inj?r.inj.idr:null,vol:d.vol||null,pre:r.huEst,noiseEst:r.est};
+}
+function dist(a,b){
+  // a = 查詢者；掃描前只比對掃描前就有的資料
+  const t=[[a.bmi-b.bmi,3],[a.hr-b.hr,5],[a.hrv-b.hrv,5],[(a.arr-b.arr)*2,1],[a.protocol===b.protocol?0:1.5,1],[a.kvp-b.kvp,20]];
+  if(!a.pre)t.push([a.lm-b.lm,50],[a.ao-b.ao,60]);
+  if(!a.noiseEst)t.push([a.noise-b.noise,5]);
+  if(a.idr!=null&&b.idr!=null)t.push([a.idr-b.idr,.3]);
+  if(a.age!=null&&b.age!=null)t.push([a.age-b.age,8]);
+  if(a.sex&&b.sex)t.push([a.sex===b.sex?0:1,1]);
+  if(a.vol!=null&&b.vol!=null)t.push([a.vol-b.vol,10]);
+  let s=0;t.forEach(([v,sc])=>{s+=Math.pow(v/sc,2)});
+  return Math.sqrt(s/t.length);
+}
+// 有實際評分的資料索引（快取，資料變動時清除）
+let IDX=null;
+function getIdx(){
+  if(!IDX)IDX=mem.filter(x=>x.actual&&ready(x)).map(x=>{const r=predict(x);return {x,r,f:feat(x,r)};});
+  return IDX;
+}
+const K=7;
+function knnF(f,excl){
+  const idx=getIdx();let top=[],n=0;
+  for(const o of idx){
+    if(o.x.ts===excl)continue;n++;
+    const dd=dist(f,o.f);
+    if(top.length<K||dd<top[top.length-1].d){
+      top.push({x:o.x,rx:o.r,d:dd});top.sort((a,b)=>a.d-b.d);if(top.length>K)top.pop();
+    }
+  }
+  if(!top.length)return {n:0,list:[]};
+  let ws=0,gs=0,low=0;
+  top.forEach(o=>{o.sim=Math.exp(-o.d/2);const w=1/(o.d+.3);ws+=w;gs+=w*o.x.actual;if(o.x.actual<=2)low+=w;});
+  const mean=gs/ws,avgSim=top.reduce((s,o)=>s+o.sim,0)/top.length;
+  return {n,list:top,mean,lowRisk:low/ws,avgSim};
+}
+function knn(d,r){return knnF(feat(d,r),editTs);}
+// 綜合預測：規則與資料庫依資料量與相似度加權
+function combine(ruleGrade,k){
+  const w=Math.min(.7,k.n/40)*Math.min(1,k.avgSim/.6);
+  const v=(1-w)*ruleGrade+w*k.mean;
+  return {w,value:v,grade:Math.max(1,Math.min(4,Math.round(v)))};
+}
+
+// ------------- 預測能力（leave-one-out）
+const MAXQ=800;   // 資料量大時抽樣評估，避免卡頓
+let PERF={},perfTimer=null;
+function preView(x){return {...x,ao:null,lm:null,noise:null};}
+function metrics(pairs){
+  const n=pairs.length;if(!n)return null;
+  let ex=0,w1=0,ae=0,tp=0,fn=0,tn=0,fp=0;
+  const O=[[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]];
+  pairs.forEach(([a,p])=>{const d=Math.abs(a-p);if(!d)ex++;if(d<=1)w1++;ae+=d;O[a-1][p-1]++;
+    if(a<=2){if(p<=2)tp++;else fn++;}else{if(p<=2)fp++;else tn++;}});
+  // 二次加權 Kappa
+  const ra=O.map(r=>r.reduce((s,v)=>s+v,0)),ca=[0,1,2,3].map(j=>O.reduce((s,r)=>s+r[j],0));
+  let num=0,den=0;
+  for(let i=0;i<4;i++)for(let j=0;j<4;j++){const wt=(i-j)*(i-j)/9;num+=wt*O[i][j];den+=wt*ra[i]*ca[j]/n;}
+  const kappa=den>0?1-num/den:null;
+  // Wilson 95% CI
+  const z=1.96,ph=ex/n,dd=1+z*z/n,c=(ph+z*z/(2*n))/dd,h=z*Math.sqrt(ph*(1-ph)/n+z*z/(4*n*n))/dd;
+  return {n,acc:ex/n,lo:Math.max(0,c-h),hi:Math.min(1,c+h),w1:w1/n,mae:ae/n,kappa,
+    sens:tp+fn?tp/(tp+fn):null,spec:tn+fp?tn/(tn+fp):null,pos:tp+fn};
+}
+// ===================== 院內校正模型：比例勝算（順序）邏輯迴歸 =====================
+// P(評分 ≤ k) = σ(θk − η)，η = β·x，k = 1,2,3。x 用規則的三個子分數加上年齡、性別。
+// 門檻：每個自變項約 10 個「事件」（評分 ≤2）的經驗法則（Peduzzi 1996）；模型有 5 個自變項 → ≥50
+const CAL_MIN_N=100,CAL_MIN_POOR=50,CAL_PRELIM_POOR=20,CAL_KEY='ccta_iq_cal';
+function calTier(c){
+  if(!c)return {k:'none',t:'資料不足'};
+  if(c.ok)return {k:'ok',t:'可靠（評分 ≤2 ≥50 筆）'};
+  if(c.prelim)return {k:'pre',t:'初步（評分 ≤2 20–49 筆）'};
+  return {k:'try',t:'試算（未達初步門檻）'};
+}
+const tierTag=c=>{const t=calTier(c);return `<span class="tier ${t.k}">${t.t}</span>`;};
+const CAL_FEAT=['C 對比 (÷100)','M 運動 (÷100)','N 雜訊 (÷100)','年齡（每 10 歲，以 60 歲為 0）','女性（男 0、女 1、未填 0.5）'];
+let calPref={base:'auto',force:false,riskMode:'target',riskTarget:.8,riskThr:.2};
+try{calPref=Object.assign(calPref,JSON.parse(localStorage.getItem(CAL_KEY)||'{}'));}catch(e){}
+const calSave=()=>{try{localStorage.setItem(CAL_KEY,JSON.stringify(calPref));}catch(e){}};
+function calX(r,d){const b=r.bk;return [b.c/100,b.m/100,b.n/100,d.age>0?(d.age-60)/10:0,d.sex==='F'?1:d.sex==='M'?0:.5];}
+const sig=z=>1/(1+Math.exp(-z));
+function thetas(t){return [t[0],t[0]+Math.exp(t[1]),t[0]+Math.exp(t[1])+Math.exp(t[2])];}
+function ordFit(X,Y,lam=0.5,iters){
+  iters=iters||(X.length>2000?600:1200);
+  const n=X.length,p=X[0].length;
+  // 初值：依各評分累積比例設定切點
+  const cnt=[0,0,0,0];Y.forEach(y=>cnt[y-1]++);
+  const cum=[cnt[0],cnt[0]+cnt[1],cnt[0]+cnt[1]+cnt[2]].map(c=>Math.min(.98,Math.max(.02,(c+.5)/(n+1))));
+  const lg=q=>Math.log(q/(1-q));
+  let beta=new Array(p).fill(0),t=[lg(cum[0]),Math.log(Math.max(.05,lg(cum[1])-lg(cum[0]))),Math.log(Math.max(.05,lg(cum[2])-lg(cum[1])))];
+  const P=p+3,m=new Array(P).fill(0),v=new Array(P).fill(0),lr=.05,b1=.9,b2=.999;
+  for(let it=1;it<=iters;it++){
+    const th=thetas(t),gB=new Array(p).fill(0),gT=[0,0,0];   // 對 θ1..θ3 的梯度
+    for(let i=0;i<n;i++){
+      let eta=0;for(let j=0;j<p;j++)eta+=beta[j]*X[i][j];
+      const k=Y[i];
+      const Fa=k<4?sig(th[k-1]-eta):1,Fb=k>1?sig(th[k-2]-eta):0;
+      const fa=k<4?Fa*(1-Fa):0,fb=k>1?Fb*(1-Fb):0;
+      const pr=Math.max(1e-12,Fa-Fb);
+      const dEta=(fb-fa)/pr;
+      for(let j=0;j<p;j++)gB[j]+=dEta*X[i][j];
+      if(k<4)gT[k-1]+=fa/pr;if(k>1)gT[k-2]-=fb/pr;
+    }
+    for(let j=0;j<p;j++)gB[j]-=lam*beta[j];       // ridge 正則化
+    // 鏈鎖到重新參數化的 t
+    const e1=Math.exp(t[1]),e2=Math.exp(t[2]);
+    const gt=[gT[0]+gT[1]+gT[2],(gT[1]+gT[2])*e1,gT[2]*e2];
+    const g=gB.concat(gt).map(x=>x/n);
+    const par=beta.concat(t);
+    for(let q=0;q<P;q++){m[q]=b1*m[q]+(1-b1)*g[q];v[q]=b2*v[q]+(1-b2)*g[q]*g[q];
+      par[q]+=lr*(m[q]/(1-Math.pow(b1,it)))/(Math.sqrt(v[q]/(1-Math.pow(b2,it)))+1e-8);}
+    beta=par.slice(0,p);t=par.slice(p);
+  }
+  return {beta,theta:thetas(t)};
+}
+function ordProb(M,x){
+  let eta=0;for(let j=0;j<x.length;j++)eta+=M.beta[j]*x[j];
+  const c=M.theta.map(th=>sig(th-eta));
+  return [c[0],c[1]-c[0],c[2]-c[1],1-c[2]];   // 評分 1..4 的機率
+}
+// 預測評分 = 期望評分四捨五入（順序資料不平衡時比「取機率最高者」穩定）
+function ordGrade(M,x){const pr=ordProb(M,x);const ev=pr[0]+2*pr[1]+3*pr[2]+4*pr[3];return {grade:Math.max(1,Math.min(4,Math.round(ev))),prob:pr,ev};}
+// 依模式取得建模資料
+function calData(which){
+  const rows=[];
+  for(const o of getIdx()){
+    const ok=which==='pre'?(o.x.rate>0&&o.x.conc>0):(o.x.ao>0&&o.x.lm>0);if(!ok)continue;
+    const v=which==='pre'?preView(o.x):o.x,r=which==='pre'?predict(v):o.r;
+    rows.push({o,r,x:calX(r,o.x),y:o.x.actual});
+  }
+  return rows;
+}
+function calEligible(rows){const poor=rows.filter(q=>q.y<=2).length,big=rows.length>=CAL_MIN_N;return {n:rows.length,poor,ok:big&&poor>=CAL_MIN_POOR,prelim:big&&poor>=CAL_PRELIM_POOR};}
+let CAL={};   // {pre:{model,n,poor,ok}, post:{…}}
+function calActive(which){const c=CAL[which];return !!(c&&c.model);}
+// 目前採用的基準模型：'rule' 或 'calib'
+function baseOf(which){
+  if(calPref.base==='rule'||!calActive(which))return 'rule';
+  if(calPref.base==='calib')return 'calib';
+  if(!CAL[which].ok)return 'rule';   // 自動模式只在「可靠」時才可能改用校正模型
+  const E=PERF[which];if(!E||!E.combCal)return 'rule';
+  const a=E.comb,b=E.combCal;
+  if(a.kappa!=null&&b.kappa!=null&&Math.abs(a.kappa-b.kappa)>1e-9)return b.kappa>a.kappa?'calib':'rule';
+  return b.mae<a.mae?'calib':'rule';
+}
+function calPredict(which,r,d){const c=CAL[which];if(!c||!c.model)return null;return ordGrade(c.model,calX(r,d));}
+
+// ===================== 品質不佳風險（P(評分 ≤2)）=====================
+function riskAt(pairs,t){
+  let tp=0,fn=0,fp=0,tn=0;
+  pairs.forEach(([pos,p])=>{if(p>=t){pos?tp++:fp++;}else{pos?fn++:tn++;}});
+  return {t,sens:tp+fn?tp/(tp+fn):null,spec:tn+fp?tn/(tn+fp):null,ppv:tp+fp?tp/(tp+fp):null,npv:tn+fn?tn/(tn+fn):null,rate:(tp+fp)/pairs.length,tp,fp,fn,tn};
+}
+function aucOf(pairs){   // Mann–Whitney
+  const P=pairs.filter(x=>x[0]).map(x=>x[1]),N=pairs.filter(x=>!x[0]).map(x=>x[1]);
+  if(!P.length||!N.length)return null;let s=0;
+  for(const a of P)for(const b of N)s+=a>b?1:a===b?.5:0;
+  return s/(P.length*N.length);
+}
+function riskEval(pairs){
+  const npos=pairs.filter(x=>x[0]).length;
+  let thr;
+  if(calPref.riskMode==='manual')thr=calPref.riskThr;
+  else{ // 取能達到目標敏感度的最高門檻（示警最少）
+    const ps=pairs.filter(x=>x[0]).map(x=>x[1]).sort((a,b)=>b-a);
+    thr=ps.length?ps[Math.max(0,Math.ceil(calPref.riskTarget*ps.length)-1)]:.5;
+  }
+  return {n:pairs.length,npos,auc:aucOf(pairs),thr,...riskAt(pairs,thr),
+    curve:[.05,.1,.15,.2,.3,.4,.5].map(t=>riskAt(pairs,t))};
+}
+const fT=t=>t<.1?(t*100).toFixed(1)+'%':Math.round(t*100)+'%';
+function riskThr(which){const E=PERF[which];if(calPref.riskMode==='manual')return calPref.riskThr;return E&&E.risk?E.risk.thr:null;}
+function riskBlock(d,r){
+  const c=CAL[mode];
+  if(!c||!c.model){
+    return `<div class="risk none"><b>品質不佳風險：</b>需要院內校正模型（目前有評分 ${c?c.n:0} / 100 筆、評分 ≤2 ${c?c.poor:0} 筆；≥20 筆為初步、≥50 筆較可靠）。</div>`;
+  }
+  const cp=calPredict(mode,r,d),p2=cp.prob[0]+cp.prob[1],t=riskThr(mode),E=PERF[mode],R=E&&E.risk;
+  if(t==null)return '';
+  const hit=p2>=t;
+  const why=[['對比',r.bk.c],['運動',r.bk.m],['雜訊',r.bk.n]].sort((a,b)=>a[1]-b[1])[0];
+  return `<div class="risk ${hit?'hit':'ok'}">
+    <div class="rh">${hit?'⚠ 品質不佳風險：示警':'✓ 品質不佳風險：低於門檻'}</div>
+    <div>評分 ≤2 的機率 <b>${Math.round(p2*100)}%</b>　門檻 ${fT(t)}${calPref.riskMode==='target'?`（目標敏感度 ${Math.round(calPref.riskTarget*100)}%）`:'（手動）'}</div>
+    ${hit?`<div class="sub">最弱的面向：${why[0]}（${Math.round(why[1])} 分）。${{'對比':'可檢查注射速率 / IDR、觸發時間，或考慮降低 kVp。','運動':'可考慮 β-blocker 控制心率，或改用較耐受心率的 protocol。','雜訊':'可考慮提高 kVp 或 mAs，或使用 iterative / DL 重建。'}[why[0]]}詳見下方「影響因素與建議」。</div>`:''}
+    ${R?`<div class="sub">此門檻在交叉驗證中：敏感度 ${pct(R.sens)}、特異度 ${pct(R.spec)}、陽性預測值 ${pct(R.ppv)}、示警比例 ${pct(R.rate)}${R.npos<10?'<span class="warn">（評分 ≤2 的案例少於 10 筆，數字不穩定）</span>':''}</div>`:''}
+    <div class="sub">模型狀態：${tierTag(c)}${!c.ok?'　數字可能不穩定，僅供參考':''}</div>
+  </div>`;
+}
+function renderCal(){
+  const el=$('#calres');if(!el)return;
+  const sec=w=>{
+    const c=CAL[w],E=PERF[w],name=w==='pre'?'掃描前':'掃描後';
+    if(!c||!c.n)return `<div class="sec">${name}</div><p class="sub">尚無可建模的資料${w==='pre'?'（需有 injection rate）':'（需有實測 HU）'}。</p>`;
+    const prog=`有評分 <b>${c.n}</b> / ${CAL_MIN_N} 筆、評分 ≤2 <b>${c.poor}</b> 筆（初步 ${CAL_PRELIM_POOR}、可靠 ${CAL_MIN_POOR}）`;
+    let h=`<div class="sec">${name}　${tierTag(c)}</div><p class="sub">${prog}</p>`;
+    if(!c.model)return h+(c.n<20?'<p class="hint">少於 20 筆，無法試算。</p>':'<p class="hint">未達初步門檻；勾選「提前試算」可先看模型結果。</p>');
+    const b=c.model.beta,sum=Math.abs(b[0])+Math.abs(b[1])+Math.abs(b[2])||1;
+    const rel=[0,1,2].map(i=>b[i]/sum);
+    h+=`<div class="tw"><table><tr><th>項目</th><th>係數 β</th><th>相對權重</th><th>規則權重</th></tr>
+      ${CAL_FEAT.map((f,i)=>`<tr><td>${f}</td><td>${b[i].toFixed(2)}</td><td>${i<3?Math.round(rel[i]*100)+'%':'–'}</td><td>${i<3?['35%','40%','25%'][i]:'–'}</td></tr>`).join('')}
+      <tr><td>切點 θ1 / θ2 / θ3</td><td colspan="3">${c.model.theta.map(t=>t.toFixed(2)).join(' / ')}</td></tr></table></div>`;
+    if(E&&E.cal){const u=baseOf(w);
+      h+=`<p class="sub">交叉驗證加權 Kappa：規則＋相似案例 <b>${E.comb.kappa==null?'–':E.comb.kappa.toFixed(2)}</b>　vs　校正模型＋相似案例 <b>${E.combCal.kappa==null?'–':E.combCal.kappa.toFixed(2)}</b> → 目前採用：<b>${u==='calib'?'院內校正模型':'規則'}</b>${calPref.base!=='auto'?'（手動指定）':!c.ok?'（尚未達「可靠」，自動模式維持規則）':''}</p>`;}
+    return h;
+  };
+  const rsec=w=>{const E=PERF[w],R=E&&E.risk,name=w==='pre'?'掃描前':'掃描後';
+    if(!R)return `<div class="sec">品質不佳風險示警・${name}</div><p class="sub">需要院內校正模型。</p>`;
+    return `<div class="sec">品質不佳風險示警・${name}（5 折交叉驗證）</div>
+    <p class="sub">評分 ≤2 共 ${R.npos} / ${R.n} 筆；AUC <b>${R.auc==null?'–':R.auc.toFixed(2)}</b>；目前門檻 <b>${fT(R.thr)}</b> → 敏感度 <b>${pct(R.sens)}</b>、特異度 ${pct(R.spec)}、陽性預測值 ${pct(R.ppv)}、陰性預測值 ${pct(R.npv)}、示警比例 ${pct(R.rate)}${R.npos<10?' <span class="warn">（陽性案例太少，數字不穩定）</span>':''}</p>
+    <div class="tw"><table><tr><th>門檻</th><th>敏感度</th><th>特異度</th><th>陽性預測值</th><th>示警比例</th></tr>
+      ${R.curve.map(x=>`<tr><td>${Math.round(x.t*100)}%</td><td>${pct(x.sens)}</td><td>${pct(x.spec)}</td><td>${pct(x.ppv)}</td><td>${pct(x.rate)}</td></tr>`).join('')}</table></div>`;};
+  el.innerHTML=sec('pre')+sec('post')+rsec('pre')+rsec('post')+`<p class="hint">係數 β 為正，表示該項越高，評分越可能較高。相對權重只比較 C、M、N 三項的係數大小，可和規則的 35% / 40% / 25% 對照，看貴院資料中哪個面向影響最大。模型 P(評分 ≤ k) = σ(θ<sub>k</sub> − β·x)，以期望評分（Σ k·P(k)）四捨五入為預測值；係數有 ridge 正則化（λ = 0.5）以避免資料少時過度擬合。</p>`;
+  $('#calbase').value=calPref.base;$('#calforce').checked=!!calPref.force;
+}
+function evaluate(which){
+  const idx=getIdx();
+  let qs=idx.filter(o=>which==='pre'?(o.x.rate>0&&o.x.conc>0):(o.x.ao>0&&o.x.lm>0));
+  const total=qs.length;
+  const mq=idx.length>2000?250:MAXQ;   // 資料量很大時減少抽樣數，保持流暢
+  if(qs.length>mq){const step=qs.length/mq;qs=Array.from({length:mq},(_,i)=>qs[Math.floor(i*step)]);}
+  const P={rule:[],db:[],comb:[],cal:[],combCal:[]};
+  // 院內校正模型：5 折交叉驗證（每筆的預測都來自沒看過它的模型）
+  let cvPred=null;
+  const rows=calData(which),el=calEligible(rows);
+  if(rows.length>=20&&(el.prelim||calPref.force)){
+    cvPred=new Map();const F=5;
+    for(let f=0;f<F;f++){
+      const tr=rows.filter((_,i)=>i%F!==f),te=rows.filter((_,i)=>i%F===f);
+      if(!tr.length||!te.length)continue;
+      const M=ordFit(tr.map(q=>q.x),tr.map(q=>q.y));
+      te.forEach(q=>{const og=ordGrade(M,q.x);cvPred.set(q.o.x.ts,{grade:og.grade,p2:og.prob[0]+og.prob[1]});});
+    }
+  }
+  for(const o of qs){
+    const v=which==='pre'?preView(o.x):o.x;
+    const r=which==='pre'?predict(v):o.r,f=which==='pre'?feat(v,r):o.f;
+    const k=knnF(f,o.x.ts);const a=o.x.actual;
+    P.rule.push([a,r.grade]);
+    if(k.n){P.db.push([a,Math.max(1,Math.min(4,Math.round(k.mean)))]);P.comb.push([a,combine(r.grade,k).grade]);}
+    else{P.comb.push([a,r.grade]);}
+    if(cvPred&&cvPred.has(o.x.ts)){const cv=cvPred.get(o.x.ts),cg=cv.grade;P.cal.push([a,cg]);P.combCal.push([a,k.n?combine(cg,k).grade:cg]);}
+  }
+  return {which,total,sampled:qs.length<total?qs.length:0,rule:metrics(P.rule),db:metrics(P.db),comb:metrics(P.comb),
+    cal:cvPred?metrics(P.cal):null,combCal:cvPred?metrics(P.combCal):null,calN:el.n,calPoor:el.poor,
+    risk:cvPred?riskEval((()=>{const ym=new Map(rows.map(q=>[q.o.x.ts,q.y]));return [...cvPred.entries()].map(([ts,v])=>[ym.get(ts)<=2,v.p2]);})()):null};
+}
+const pct=v=>v==null?'–':Math.round(v*100)+'%';
+function perfTable(E){
+  if(!E||!E.total)return '<p class="sub">沒有可評估的資料。</p>';
+  const row=(name,m,hl)=>m?`<tr${hl?' class="hl"':''}><td>${name}</td><td>${pct(m.acc)}<span class="ci">${pct(m.lo)}–${pct(m.hi)}</span></td><td>${pct(m.w1)}</td><td>${m.mae.toFixed(2)}</td><td>${m.kappa==null?'–':m.kappa.toFixed(2)}</td><td>${pct(m.sens)}</td><td>${pct(m.spec)}</td></tr>`:'';
+  return `<div class="tw"><table class="perf"><tr><th>方法</th><th>完全一致<span class="ci">95% CI</span></th><th>±1 分內</th><th>平均誤差</th><th>加權 Kappa</th><th>不佳敏感度</th><th>不佳特異度</th></tr>
+    ${row('規則',E.rule)}${row('資料庫相似案例',E.db)}${row('綜合（規則＋相似案例）',E.comb,baseOf(E.which)==='rule')}
+    ${E.cal?row('院內校正模型（5 折交叉驗證）',E.cal)+row('綜合（校正模型＋相似案例）',E.combCal,baseOf(E.which)==='calib'):''}</table></div>
+    <p class="hint">底色列＝目前實際採用的預測方式。</p>`;
+}
+function perfNote(E){
+  if(!E||!E.total)return '';
+  let t=`評估 ${E.sampled?E.sampled+' / '+E.total:E.total} 筆${E.sampled?'（資料量大，平均抽樣）':''}；「不佳」= 實際評分 ≤2，共 ${E.comb.pos} 筆。`;
+  if(E.total<30)t+=' <span class="warn">樣本少於 30 筆，數字變動大，僅供參考。</span>';
+  if(E.comb.pos<5)t+=' <span class="warn">評分 ≤2 的案例太少，敏感度不可靠。</span>';
+  return `<p class="hint">${t}</p>`;
+}
+function runPerf(){
+  const n=getIdx().length;
+  if(!n){PERF={};CAL={};}
+  else{
+    CAL={};
+    for(const w of ['pre','post']){
+      const rows=calData(w),el=calEligible(rows);
+      CAL[w]={...el,model:(rows.length>=20&&(el.prelim||calPref.force))?ordFit(rows.map(q=>q.x),rows.map(q=>q.y)):null};
+    }
+    PERF={pre:evaluate('pre'),post:evaluate('post'),n,at:new Date()};
+  }
+  renderPerf();renderCal();render();
+}
+function schedulePerf(){
+  clearTimeout(perfTimer);
+  ['#perf1','#perf2'].forEach(s=>{const el=$(s);if(el)el.style.opacity=.55;});
+  perfTimer=setTimeout(()=>{runPerf();['#perf1','#perf2'].forEach(s=>$(s).style.opacity=1);},350);
+}
+function renderPerf(){
+  const empty='<p class="sub">資料庫中尚無有實際評分的紀錄。匯入含 actual_grade 的資料，或在「掃描後」模式填入實際評分後，這裡會即時顯示預測準確度。</p>';
+  $('#perfmode').textContent=mode==='pre'?'（掃描前模式）':'（掃描後模式）';
+  if(!PERF.n){$('#perf1').innerHTML=empty;$('#perf2').innerHTML=empty;return;}
+  const E=PERF[mode],m=E&&(baseOf(mode)==='calib'&&E.combCal?E.combCal:E.comb);
+  $('#perf1').innerHTML=!m?'<p class="sub">此模式沒有可評估的資料'+(mode==='pre'?'（需有 injection rate）':'（需有實測 HU）')+'。</p>':`
+    <div class="kpis">
+      <div><b>${pct(m.acc)}</b><span>完全一致</span></div>
+      <div><b>${pct(m.w1)}</b><span>±1 分內</span></div>
+      <div><b>${m.mae.toFixed(2)}</b><span>平均誤差（分）</span></div>
+      <div><b>${m.pos?pct(m.sens):'–'}</b><span>抓出品質不佳（${m.pos} 例${m.pos<5?'，太少':''}）</span></div>
+    </div>
+    ${E.risk?`<p class="sub">品質不佳風險示警（門檻 ${fT(E.risk.thr)}）：敏感度 <b>${pct(E.risk.sens)}</b>、特異度 ${pct(E.risk.spec)}、AUC ${E.risk.auc==null?'–':E.risk.auc.toFixed(2)}</p>`:''}
+    <p class="hint">以資料庫 ${E.total} 筆有評分的資料做交叉驗證，${baseOf(mode)==='calib'?'院內校正模型':'規則'}＋相似案例的綜合結果。${E.total<30?'<span class="warn">樣本少於 30 筆，僅供參考。</span>':''}<a href="#" id="perfmore">詳細比較</a></p>`;
+  const more=$('#perfmore');if(more)more.onclick=e=>{e.preventDefault();document.querySelector('nav button[data-v="list"]').click();$('#perf2').scrollIntoView({behavior:'smooth'});};
+  $('#perf2').innerHTML=`
+    <div class="sec">掃描前（只用基本資料與注射參數）</div>${perfTable(PERF.pre)}${perfNote(PERF.pre)}
+    <div class="sec">掃描後（加入實測 HU 與 SD）</div>${perfTable(PERF.post)}${perfNote(PERF.post)}
+    <p class="hint">留一交叉驗證：每筆有實際評分的資料輪流當作「新受檢者」，用其餘資料預測後與實際評分比對。更新時間 ${PERF.at.toLocaleTimeString()}。</p>`;
+}
+function renderDB(d,r){
+  const el=$('#dbres');let html='';
+  // ID / Req match
+  const m=mem.filter(x=>(d.id&&x.id&&x.id===d.id)||(d.req&&x.req&&x.req===d.req));
+  if(d.id||d.req){
+    if(m.length){
+      html+=m.map(x=>{const rx=ready(x)?predict(x):null;const cur=x.ts===editTs;
+        return `<div class="match">${cur?'✎ 目前編輯中：':'資料庫已有此受檢者：'}<b>${esc(x.id||'–')}</b> / ${esc(x.req||'–')}
+        · ${x.ts?x.ts.slice(0,10):''} · 預測 ${rx?rx.grade:'–'} · 實際 ${x.actual||'未填'}
+        ${cur?'':`<button type="button" class="btn ghost" data-load="${esc(x.ts)}">載入</button>`}</div>`;}).join('');
+    }else html+=`<div class="match">資料庫中沒有相同 ID / Req no. 的紀錄（新受檢者）。</div>`;
+  }
+  if(!r){el.innerHTML=html||'<div class="empty">輸入 ID / Req no. 或受檢者資料後，自動與資料庫比對</div>';bindLoad();return;}
+  const k=knn(d,r);
+  if(!k.n){
+    html+=`<p class="sub">資料庫中尚無「有實際評分」的紀錄，無法做相似案例比對。請在「資料庫」頁匯入含 actual_grade 的 CSV，或先載入示範資料試用。</p>`;
+    el.innerHTML=html;bindLoad();return;
+  }
+  const useCal=baseOf(mode)==='calib',cp=useCal?calPredict(mode,r,d):null,baseG=cp?cp.grade:r.grade,baseName=cp?'校正模型':'規則';
+  const C=combine(baseG,k),w=C.w,cg=C.grade,CG=GRADE[cg];
+  html+=`<div class="dbsum">
+    <div><b style="color:${CG.c}">${cg} · ${CG.t}</b><span>綜合預測（${baseName} ${Math.round((1-w)*100)}% + 資料庫 ${Math.round(w*100)}%）</span></div>
+    <div><b>${k.mean.toFixed(1)}</b><span>相似案例實際評分（加權平均）</span></div>
+    <div><b>${Math.round(k.lowRisk*100)}%</b><span>相似案例中評分 ≤2 的比例</span></div>
+    <div><b>${Math.round(k.avgSim*100)}%</b><span>平均相似度（資料庫 ${k.n} 筆有評分）</span></div>
+  </div>`;
+  if(Math.abs(k.mean-baseG)>=1)html+=`<p class="warn" style="font-size:14px">${baseName}預測 (${baseG}) 與相似案例實際評分 (${k.mean.toFixed(1)}) 差距 ≥1 分，院內條件可能與規則假設不同，建議以相似案例為參考。</p>`;
+  if(k.avgSim<.45)html+=`<p class="sub">資料庫中沒有很相似的案例，資料庫結果權重已降低。</p>`;
+  html+=`<div class="sec">最相似的 ${k.list.length} 筆案例</div><div class="tw"><table>
+   <tr><th>相似度</th><th>ID</th><th>性別</th><th>年齡</th><th>BMI</th><th>HR</th><th>Protocol</th><th>kVp</th><th>LM HU</th><th>SD</th><th>IDR</th><th>規則</th><th>實際</th><th></th></tr>
+   ${k.list.map(o=>{const x=o.x,G=GRADE[x.actual];return `<tr><td>${Math.round(o.sim*100)}%</td><td>${esc(x.id||'')}</td><td>${x.sex==='F'?'女':x.sex==='M'?'男':'–'}</td><td>${x.age||'–'}</td><td>${o.rx.bmi.toFixed(1)}</td><td>${x.hr}</td>
+   <td>${PROTO[o.rx.protocol].name}</td><td>${o.rx.kvp}</td><td>${o.rx.lm}${o.rx.huEst?'*':''}</td><td>${o.rx.noise.toFixed(0)}${o.rx.est?'*':''}</td>
+   <td>${o.rx.inj?o.rx.inj.idr.toFixed(2):'–'}</td><td>${o.rx.grade}</td><td><span class="pill" style="background:${G.c}">${x.actual}</span></td>
+   <td><a href="#" data-load="${esc(x.ts)}">載入</a></td></tr>`}).join('')}
+  </table></div><p class="hint">* 為估算值。相似度依性別、年齡、BMI、心率、心律、protocol、kVp、IDR、contrast volume 計算；掃描後模式再加入 LM/Aortic HU 與 SD。</p>`;
+  el.innerHTML=html;bindLoad();
+}
+function bindLoad(){document.querySelectorAll('#dbres [data-load]').forEach(b=>b.onclick=e=>{e.preventDefault();loadRecord(b.getAttribute('data-load'));});}
+
+// ------------- demo database (synthetic)
+function rnd(seed){return function(){seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};}
+$('#demodb').onclick=()=>{
+  if(mem.some(x=>/^DEMO-/.test(x.id||''))){$('#msg2').textContent='示範資料已存在。';return;}
+  const R=rnd(20261113),pick=a=>a[Math.floor(R()*a.length)],g=(m,s)=>m+s*(R()+R()+R()-1.5)*1.15;
+  const protos=['prospective','prospective','prospective','retrospective','highpitch','wide'];
+  for(let i=1;i<=60;i++){
+    const h=Math.round(g(165,9)),wt=Math.round(g(70,14)),bmi=wt/Math.pow(h/100,2);
+    const kvp=autoKvp(bmi,wt),rate=+(g(5,.8)).toFixed(1),vol=Math.round(g(60,10));
+    const d={id:'DEMO-'+String(i).padStart(3,'0'),req:'DR'+(1000+i),height:h,weight:wt,age:Math.round(Math.min(85,Math.max(30,g(60,11)))),sex:R()<.45?'F':'M',hrType:'scan',hr:Math.round(g(64,9)),hrv:Math.max(1,Math.round(g(5,4))),
+      arr:R()<.07,protocol:pick(protos),kvp,conc:370,vol,rate,ao:null,lm:null,noise:null,ts:new Date(Date.now()-i*864e5).toISOString()};
+    const e=estimateHU(d,injection(d));d.ao=Math.round(e.ao*g(1,.18));d.lm=Math.round(d.ao*g(.93,.05));
+    d.noise=+(sdEst(bmi,kvp,d.sex)*g(1,.15)).toFixed(1);
+    let a=predict(d).grade;if(d.age>=72&&R()<.3)a--;const u=R();if(u<.15)a--;else if(u>.85)a++;d.actual=Math.max(1,Math.min(4,a));
+    mem.push(d);
+  }
+  store();renderList();render();$('#msg2').textContent='已載入 60 筆模擬資料（ID 以 DEMO- 開頭，僅供試用）。';
+};
+$('#rmdemo').onclick=()=>{const n=mem.length;mem=mem.filter(x=>!/^DEMO-/.test(x.id||''));store();renderList();render();$('#msg2').textContent=`已移除 ${n-mem.length} 筆示範資料。`;};
+
+function renderList(){
+  if(!mem.length){$('#tbl').innerHTML='<tr><td class="empty">尚無紀錄</td></tr>';$('#agree').textContent='';return;}
+  let n=0,exact=0,within1=0,mae=0;
+  const rows=mem.map((d,i)=>{const r=predict(d),G=GRADE[r.grade];
+    if(d.actual){n++;const df=Math.abs(d.actual-r.grade);mae+=df;if(!df)exact++;if(df<=1)within1++;}
+    return `<tr><td>${esc(d.id||'')}</td><td>${esc(d.req||'')}</td><td>${r.bmi.toFixed(1)}</td><td>${d.hr}</td>
+    <td>${PROTO[r.protocol].name}${r.auto?'*':''}</td><td>${r.kvp}</td><td>${r.ao}${r.huEst?'*':''}</td><td>${r.lm}${r.huEst?'*':''}</td>
+    <td>${r.total}</td><td><span class="pill" style="background:${G.c}">${r.grade}</span></td><td>${d.actual||'–'}</td>
+    <td><a href="#" data-load="${esc(d.ts||'')}">載入</a> · <a href="#" data-del="${i}" style="color:var(--g1)">刪除</a></td></tr>`;}).join('');
+  $('#tbl').innerHTML=`<tr><th>ID</th><th>Req</th><th>BMI</th><th>HR</th><th>Protocol</th><th>kVp</th><th>Ao HU</th><th>LM HU</th><th>分數</th><th>預測</th><th>實際</th><th></th></tr>`+rows;
+  $('#agree').textContent=n?`共 ${mem.length} 筆；有實際評分 ${n} 筆：完全一致 ${(exact/n*100).toFixed(0)}%、差距≤1 ${(within1/n*100).toFixed(0)}%、平均誤差 ${(mae/n).toFixed(2)} 分`:`共 ${mem.length} 筆（填入實際評分可計算預測一致性）`;
+}
+$('#tbl').addEventListener('click',e=>{const i=e.target.getAttribute('data-del');if(i!=null){e.preventDefault();if(mem[+i]&&mem[+i].ts===editTs)setEdit(null);mem.splice(+i,1);store();renderList();render();return;}
+  const t=e.target.getAttribute('data-load');if(t!=null){e.preventDefault();document.querySelector('nav button[data-v="pred"]').click();loadRecord(t);}});
+let confirmDel=false;
+$('#delall').onclick=()=>{
+  if(!confirmDel){confirmDel=true;$('#delall').textContent='再按一次確認刪除';setTimeout(()=>{confirmDel=false;$('#delall').textContent='刪除全部';},3000);return;}
+  mem=[];store();setEdit(null);renderList();render();confirmDel=false;$('#delall').textContent='刪除全部';$('#msg2').textContent='已刪除全部紀錄。';
+};
+
+// ------------- CSV
+const COLS=['id','req','height','weight','age','sex','hr','hr_type','hrv','arrhythmia','protocol','kvp','conc','volume','rate','ao_hu','lm_hu','noise','actual_grade','pred_score','pred_grade','idr','ts'];
+const q=v=>{v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
+function buildCSV(){
+  return [COLS.join(',')].concat(mem.map(d=>{const r=ready(d)?predict(d):null;
+    return [d.id,d.req,d.height,d.weight,d.age,d.sex||'',d.hr,d.hrType||'',d.hrv,d.arr?1:0,d.protocol,d.kvp,d.conc,d.vol,d.rate,d.ao,d.lm,d.noise,d.actual,
+      r?r.total:'',r?r.grade:'',r&&r.inj?r.inj.idr.toFixed(2):'',d.ts].map(q).join(',');})).join('\n');
+}
+$('#exp').onclick=async()=>{
+  const txt=buildCSV();const ta=$('#csvout');ta.value=txt;ta.classList.remove('hidden');
+  try{await navigator.clipboard.writeText(txt);$('#msg2').textContent='已複製到剪貼簿，可貼到 Excel。';}
+  catch(e){ta.select();$('#msg2').textContent='無法自動複製，請手動複製下方文字。';}
+};
+$('#dl').onclick=()=>{
+  const blob=new Blob(['\ufeff'+buildCSV()],{type:'text/csv;charset=utf-8'});   // BOM 讓 Excel 正確顯示中文
+  const d=new Date(),p=n=>String(n).padStart(2,'0');
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=`ccta_iq_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.csv`;
+  document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);
+  $('#msg2').textContent=`已下載 ${mem.length} 筆。`;
+};
+function parseCSV(t){
+  const rows=[];let row=[],f='',inq=false;
+  for(let i=0;i<t.length;i++){const ch=t[i];
+    if(inq){if(ch=='"'){if(t[i+1]=='"'){f+='"';i++;}else inq=false;}else f+=ch;}
+    else if(ch=='"')inq=true;else if(ch==','){row.push(f);f='';}
+    else if(ch=='\n'||ch=='\r'){if(ch=='\r'&&t[i+1]=='\n')i++;row.push(f);rows.push(row);row=[];f='';}
+    else f+=ch;}
+  if(f!==''||row.length){row.push(f);rows.push(row);}
+  return rows.filter(r=>r.some(x=>x.trim()!==''));
+}
+// 同一受檢者同一次檢查的判斷依據（無 ts 欄的 CSV 也能去重）
+function parseSex(v){v=String(v||'').trim().toUpperCase();if(/^(M|MALE|男|1)$/.test(v))return 'M';if(/^(F|FEMALE|女|2)$/.test(v))return 'F';return null;}
+function recKey(d){return [d.id,d.req,d.height,d.weight,d.age,d.sex,d.hr,d.vol,d.rate,d.ao,d.lm,d.noise,d.actual].map(v=>v==null?'':String(v).trim()).join('|');}
+function importText(t,quiet){
+  const rows=parseCSV(t.replace(/^﻿/,''));if(rows.length<2){if(!quiet)$('#msg3').textContent='沒有讀到資料列。';return {ok:0,bad:0,dup:0};}
+  const h=rows[0].map(x=>x.trim().toLowerCase());const ix=k=>h.indexOf(k);
+  let ok=0,bad=0,dup=0,seq=0;const seen=new Set(mem.map(x=>x.ts)),seenK=new Set(mem.map(recKey));
+  rows.slice(1).forEach(r=>{const g=k=>{const i=ix(k);return i<0?'':(r[i]||'').trim();};
+    let pr=g('protocol').toLowerCase();
+    if(pr.startsWith('pro'))pr='prospective';else if(pr.startsWith('ret'))pr='retrospective';
+    else if(pr.startsWith('high')||pr.includes('flash'))pr='highpitch';else if(pr.startsWith('wide'))pr='wide';else pr='auto';
+    const d={id:g('id'),req:g('req'),height:num(g('height')),weight:num(g('weight')),age:num(g('age')),sex:parseSex(g('sex')),hr:num(g('hr')),hrv:num(g('hrv')),
+      arr:/^(1|y|yes|true)$/i.test(g('arrhythmia')),protocol:pr,kvp:num(g('kvp'))||'auto',conc:num(g('conc'))||370,vol:num(g('volume')),rate:num(g('rate')),ao:num(g('ao_hu')),lm:num(g('lm_hu')),
+      noise:num(g('noise')),actual:num(g('actual_grade')),ts:g('ts')||new Date().toISOString()+'-'+(seq++)};
+    if(g('hr_type'))d.hrType=g('hr_type');
+    if(seen.has(d.ts)||seenK.has(recKey(d))){dup++;return;}
+    if(ready(d)){mem.push(d);seen.add(d.ts);seenK.add(recKey(d));ok++;}else bad++;});
+  store();renderList();render();
+  if(!quiet)$('#msg3').textContent=`匯入 ${ok} 筆${dup?`，${dup} 筆已存在略過`:''}${bad?`，${bad} 筆因缺少必填欄位略過`:''}。`;
+  return {ok,bad,dup};
+}
+$('#imp').onclick=()=>{const t=$('#csvin').value.trim();if(t)importText(t);else $('#msg3').textContent='請貼上 CSV 或選擇檔案。';};
+// 讀檔：先試 UTF-8，失敗再試 Big5（Windows Excel 存的 CSV 常為 Big5）
+async function readText(f){
+  const buf=await f.arrayBuffer();
+  try{return new TextDecoder('utf-8',{fatal:true}).decode(buf);}
+  catch(e){try{return new TextDecoder('big5').decode(buf);}catch(e2){return new TextDecoder('utf-8').decode(buf);}}
+}
+async function importFiles(list){
+  const files=[...list].filter(f=>/\.(csv|txt)$/i.test(f.name)||/csv|text/.test(f.type));
+  const skipped=list.length-files.length;
+  if(!files.length){$('#impres').innerHTML='<p class="warn">沒有可匯入的 CSV 檔。</p>';return;}
+  $('#impres').innerHTML=`<p class="sub">匯入中…（${files.length} 個檔案）</p>`;
+  const rows=[];let T={ok:0,dup:0,bad:0};
+  for(const f of files){
+    let c;
+    try{const txt=await readText(f);c=importText(txt,true);c.err=!c.ok&&!c.dup&&!c.bad?'沒有資料列':'';}
+    catch(e){c={ok:0,dup:0,bad:0,err:'無法讀取'};}
+    rows.push({name:f.name,...c});T.ok+=c.ok;T.dup+=c.dup;T.bad+=c.bad;
+  }
+  $('#impres').innerHTML=`<p class="sub">完成：${files.length} 個檔案，<b style="color:var(--g4)">匯入 ${T.ok} 筆</b>、略過重複 ${T.dup} 筆、資料不完整 ${T.bad} 筆${skipped?`；${skipped} 個非 CSV 檔未處理`:''}。</p>
+  <div class="tw"><table><tr><th>檔案</th><th>匯入</th><th>重複略過</th><th>不完整</th><th></th></tr>
+  ${rows.map(r=>`<tr><td>${esc(r.name)}</td><td>${r.ok}</td><td>${r.dup}</td><td>${r.bad}</td><td class="warn">${r.err||''}</td></tr>`).join('')}
+  <tr class="tot"><td>合計</td><td>${T.ok}</td><td>${T.dup}</td><td>${T.bad}</td><td></td></tr></table></div>
+  ${T.bad?'<p class="hint">不完整＝缺身高、體重、心率，或同時缺 HU 與 injection rate。</p>':''}`;
+  $('#msg3').textContent='';
+}
+$('#file').onchange=e=>{if(e.target.files.length)importFiles(e.target.files);e.target.value='';};
+const dz=$('#drop');
+['dragenter','dragover'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.add('over');}));
+['dragleave','drop'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.remove('over');}));
+dz.addEventListener('drop',e=>{if(e.dataTransfer&&e.dataTransfer.files.length)importFiles(e.dataTransfer.files);});
+// 拖到頁面其他地方時不要讓瀏覽器直接開啟檔案
+['dragover','drop'].forEach(t=>window.addEventListener(t,e=>{if(!dz.contains(e.target))e.preventDefault();}));
+
+
+
+// ------------- 評分方法頁曲線（直接取樣評分函數，與實際計算一致）
+function curveSVG(series,xmin,xmax,xticks,xlabel){
+  const W=320,H=150,L=30,R=8,T=8,B=26,pw=W-L-R,ph=H-T-B;
+  const X=x=>L+(x-xmin)/(xmax-xmin)*pw,Y=y=>T+(1-y/100)*ph;
+  let g='';
+  [[85,'4'],[70,'3'],[50,'2']].forEach(([v,lab])=>{g+=`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-dasharray="3 3"/><text x="${W-R}" y="${Y(v)-2}" font-size="9" text-anchor="end" fill="var(--mute)">評分${lab}線</text>`;});
+  [0,50,100].forEach(v=>{g+=`<text x="${L-4}" y="${Y(v)+3}" font-size="10" text-anchor="end" fill="var(--mute)">${v}</text>`;});
+  xticks.forEach(v=>{g+=`<line x1="${X(v)}" x2="${X(v)}" y1="${T+ph}" y2="${T+ph+3}" stroke="var(--mute)"/><text x="${X(v)}" y="${T+ph+13}" font-size="10" text-anchor="middle" fill="var(--mute)">${v}</text>`;});
+  g+=`<line x1="${L}" x2="${W-R}" y1="${T+ph}" y2="${T+ph}" stroke="var(--mute)"/><text x="${L+pw/2}" y="${H-2}" font-size="10" text-anchor="middle" fill="var(--mute)">${xlabel}</text>`;
+  series.forEach(s=>{let d='';for(let i=0;i<=200;i++){const x=xmin+(xmax-xmin)*i/200;d+=(i?'L':'M')+X(x).toFixed(1)+','+Y(clamp(s.f(x))).toFixed(1);}
+    g+=`<path d="${d}" fill="none" stroke="${s.c}" stroke-width="2"/>`;});
+  let leg='';if(series.length>1)leg='<div class="sub" style="display:flex;gap:10px;flex-wrap:wrap">'+series.map(s=>`<span><span style="display:inline-block;width:12px;height:3px;background:${s.c};vertical-align:middle"></span> ${s.n}</span>`).join('')+'</div>';
+  return `<svg viewBox="0 0 ${W} ${H}" role="img">${g}</svg>${leg}`;
+}
+$('#cvC').innerHTML=curveSVG([{f:fLM,c:'var(--acc)'}],100,800,[100,200,300,400,500,600,700,800],'LM density (HU)');
+$('#cvM').innerHTML=curveSVG([
+  {f:x=>fHR(x,PROTO.prospective),c:'var(--acc)',n:'Prospective'},
+  {f:x=>fHR(x,PROTO.retrospective),c:'var(--g3)',n:'Retrospective'},
+  {f:x=>fHR(x,PROTO.highpitch),c:'var(--g1)',n:'High-pitch'},
+  {f:x=>fHR(x,PROTO.wide),c:'var(--g2)',n:'Wide-detector'}],45,105,[50,60,70,80,90,100],'心率 (bpm)');
+$('#cvN').innerHTML=curveSVG([{f:fSD,c:'var(--acc)'}],15,60,[15,25,35,45,55],'Aortic root SD (HU)');
+
+// ------------- nav
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));
+  ['pred','list','model'].forEach(v=>$('#v-'+v).classList.toggle('hidden',v!==b.dataset.v));
+  if(b.dataset.v==='list')renderList();
+});
+$('#calbase').onchange=e=>{calPref.base=e.target.value;calSave();renderPerf();renderCal();render();};
+$('#calforce').onchange=e=>{calPref.force=e.target.checked;calSave();runPerf();};
+function syncRiskUI(){$('#riskmode').value=calPref.riskMode==='manual'?'manual':'t'+calPref.riskTarget;$('#riskthr').value=Math.round(calPref.riskThr*100);$('#riskthrwrap').style.display=calPref.riskMode==='manual'?'':'none';}
+$('#riskmode').onchange=e=>{const v=e.target.value;if(v==='manual')calPref.riskMode='manual';else{calPref.riskMode='target';calPref.riskTarget=+v.slice(1);}calSave();syncRiskUI();runPerf();};
+$('#riskthr').onchange=e=>{const v=Math.min(99,Math.max(1,+e.target.value||20));calPref.riskThr=v/100;calSave();runPerf();};
+syncRiskUI();
+window.__schedulePerf=schedulePerf;window.__renderPerf=renderPerf;PERF_READY=true;
+renderList();render();setTimeout(runPerf,50);
+})();
+</script>
+</body>
+</html>
