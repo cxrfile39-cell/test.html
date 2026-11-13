@@ -72,6 +72,14 @@ tr.cur td{background:var(--acc2)}
 .deep p,.deep li{font-size:14px;line-height:1.7}
 .deep ul,.deep ol{padding-left:20px;margin:4px 0}
 .deep table td{white-space:normal;font-size:13px}
+.note{border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:14px;border:1px solid var(--line);background:var(--card);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.note.warn{border:2px solid var(--g2)}
+.note .btn{padding:5px 12px;font-size:13px}
+.pbar{margin:10px 0}
+.pbar .t{display:flex;justify-content:space-between;font-size:13px}
+.pbar .b{position:relative;height:10px;background:var(--line);border-radius:6px;overflow:hidden;margin-top:4px}
+.pbar .b i{position:absolute;left:0;top:0;bottom:0;border-radius:6px}
+.pbar .ms{display:flex;justify-content:space-between;font-size:11px;color:var(--mute);margin-top:2px}
 .disc{border:2px solid var(--g2);background:var(--card);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:14px}
 .disc b{color:var(--g2)}
 details.calc{margin-top:12px;border:1px solid var(--line);border-radius:8px;padding:8px 12px}
@@ -169,6 +177,7 @@ del{color:var(--mute)}
 <main>
 <!-- ================= 單筆預測 ================= -->
 <section id="v-pred">
+<div id="topnote"></div>
 <div class="grid">
   <div class="card">
     <h2>受檢者資料</h2>
@@ -270,7 +279,17 @@ del{color:var(--mute)}
 
 <!-- ================= 紀錄 / 批次 ================= -->
 <section id="v-list" class="hidden">
+  <div id="bkwarn"></div>
   <div class="card">
+    <h2>待補登 <span class="hint" style="font-weight:400" id="pendcnt"></span></h2>
+    <p class="hint">掃描前存的受檢者，掃描後按「補登」填入實測 HU、SD 與實際評分；有實際評分的資料才會用來調整公式。</p>
+    <div id="pending"></div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <h2>累積進度</h2>
+    <div id="progress"></div>
+  </div>
+  <div class="card" style="margin-top:14px">
     <h2>資料庫</h2>
     <p class="hint">資料庫只存在這台電腦的這個瀏覽器中，換電腦、換瀏覽器或清除瀏覽器資料就會不見，請定期用「下載 CSV」備份。可用下方 CSV 匯入既有受檢者資料（含實際評分），比對準確度會隨筆數增加。</p>
     <div id="agree" class="sub"></div>
@@ -281,6 +300,8 @@ del{color:var(--mute)}
     <h2>院內校正模型</h2>
     <p class="hint">用貴院有實際評分的資料，以比例勝算（順序）邏輯迴歸重新估計三個面向的權重與評分切點，並用 5 折交叉驗證和規則比較。門檻：有評分 ≥100 筆，且評分 ≤2：<b>20–49 筆為初步</b>（顯示模型與示警，但自動模式仍採用規則）、<b>≥50 筆較可靠</b>（自動模式才可能改用校正模型）。50 筆依「每個自變項約 10 個事件」的經驗法則（模型有 5 個自變項）。</p>
     <div id="calres"></div>
+    <div class="sec">模型調整紀錄（每增加 10 筆有評分資料記錄一次）</div>
+    <div id="calhist"></div>
     <div class="row" style="margin-top:10px">
       <label>預測採用的基準模型
         <select id="calbase">
@@ -866,7 +887,7 @@ $('#save').onclick=()=>{
   const i=editTs?mem.findIndex(x=>x.ts===editTs):-1;
   if(i>=0){d.ts=editTs;mem[i]=d;store();renderList();render();$('#msg1').textContent='已更新此筆紀錄。';return;}
   d.ts=new Date().toISOString();mem.unshift(d);store();setEdit(d.ts);renderList();render();
-  $('#msg1').textContent=`已儲存（共 ${mem.length} 筆）。`;
+  $('#msg1').textContent=d.actual?`已儲存（共 ${mem.length} 筆）。`:`已儲存（共 ${mem.length} 筆）。掃描後可在「資料庫 → 待補登」補上實測值與評分。`;
 };
 
 // ------------- database matching
@@ -1160,7 +1181,7 @@ function runPerf(){
     }
     PERF={pre:evaluate('pre'),post:evaluate('post'),n,at:new Date()};
   }
-  renderPerf();renderCal();render();
+  snapHistory();renderPerf();renderCal();renderHistory();render();
 }
 function schedulePerf(){
   clearTimeout(perfTimer);
@@ -1246,7 +1267,74 @@ $('#demodb').onclick=()=>{
 };
 $('#rmdemo').onclick=()=>{const n=mem.length;mem=mem.filter(x=>!/^DEMO-/.test(x.id||''));store();renderList();render();$('#msg2').textContent=`已移除 ${n-mem.length} 筆示範資料。`;};
 
+// ===================== 長期累積：待補登、進度、調整紀錄、備份提醒 =====================
+const BK_KEY='ccta_iq_backup',HIST_KEY='ccta_iq_hist';
+let bk={at:null,n:0};try{bk=Object.assign(bk,JSON.parse(localStorage.getItem(BK_KEY)||'{}'));}catch(e){}
+let hist=[];try{hist=JSON.parse(localStorage.getItem(HIST_KEY)||'[]');}catch(e){}
+function renderPending(){
+  const P=mem.filter(x=>!x.actual).sort((a,b)=>String(b.ts).localeCompare(String(a.ts)));
+  $('#pendcnt').textContent=P.length?`（${P.length} 筆）`:'';
+  if(!P.length){$('#pending').innerHTML='<p class="sub">沒有待補登的受檢者。</p>';return;}
+  $('#pending').innerHTML=`<div class="tw"><table><tr><th></th><th>ID</th><th>日期</th><th>Req</th><th>缺</th><th>掃描前預測</th></tr>
+   ${P.slice(0,50).map(d=>{const r=ready(d)?predict(d):null;const miss=[!(d.ao>0&&d.lm>0)?'HU':'',d.noise==null?'SD':'','評分'].filter(Boolean).join('、');
+     return `<tr><td><button class="btn" style="padding:3px 10px;font-size:13px" data-fill="${esc(d.ts)}">補登</button></td>
+     <td><b>${esc(d.id||'–')}</b></td><td>${String(d.ts).slice(0,10)}</td><td>${esc(d.req||'–')}</td><td>${miss}</td>
+     <td>${r?`<span class="pill" style="background:${GRADE[r.grade].c}">${r.grade}</span>`:'–'}</td></tr>`;}).join('')}
+   </table></div>${P.length>50?`<p class="hint">僅列出最近 50 筆。</p>`:''}`;
+  document.querySelectorAll('#pending [data-fill]').forEach(b=>b.onclick=()=>{
+    document.querySelector('nav button[data-v="pred"]').click();loadRecord(b.dataset.fill);setMode('post');render();
+    $('#msg1').textContent='補登模式：填入 Aortic root / LM HU、SD 與實際評分後，按「更新此筆紀錄」。';});
+}
+function pbar(label,v,marks,col){
+  const max=marks[marks.length-1].v,w=Math.min(100,v/max*100);
+  const next=marks.find(m=>v<m.v);
+  return `<div class="pbar"><div class="t"><span>${label}</span><b>${v}${next?` <span class="sub" style="font-weight:400">（距「${next.l}」還差 ${next.v-v}）</span>`:' ✓'}</b></div>
+    <div class="b"><i style="width:${w}%;background:${col}"></i>${marks.map(m=>`<span style="position:absolute;left:${m.v/max*100}%;top:0;bottom:0;width:2px;background:var(--card)"></span>`).join('')}</div>
+    <div class="ms">${marks.map(m=>`<span>${m.l} ${m.v}</span>`).join('')}</div></div>`;
+}
+function renderProgress(){
+  const lab=mem.filter(x=>x.actual),poorAll=lab.filter(x=>x.actual<=2).length;
+  const post=lab.filter(x=>x.ao>0&&x.lm>0),poorPost=post.filter(x=>x.actual<=2).length;
+  const prev=lab.length?poorAll/lab.length:null;
+  let h=pbar('有實際評分的受檢者',lab.length,[{v:40,l:'相似案例滿權重'},{v:100,l:'校正模型最低筆數'}],'var(--acc)');
+  h+=pbar('其中評分 ≤2（掃描後資料）',poorPost,[{v:20,l:'初步'},{v:50,l:'可靠'},{v:60,l:'敏感度 ±10%'},{v:100,l:'正式驗證'}],'var(--g1)');
+  if(prev!=null&&lab.length>=20){
+    const need=[50,100].map(k=>Math.max(0,Math.ceil((k-poorPost)/Math.max(prev,.01))));
+    h+=`<p class="sub">目前評分 ≤2 的比例約 <b>${Math.round(prev*100)}%</b>。照此比例，大約再 <b>${need[0]}</b> 筆有評分的檢查可達「可靠」、再 <b>${need[1]}</b> 筆可達「正式驗證」。</p>`;
+  }else h+='<p class="hint">累積 20 筆有評分資料後，會依貴院的不佳比例估算還需要多少筆。</p>';
+  $('#progress').innerHTML=h;
+}
+function snapHistory(){
+  const n=mem.filter(x=>x.actual).length;if(n<10)return;
+  const last=hist[hist.length-1];
+  if(last&&Math.floor(n/10)<=Math.floor(last.n/10))return;   // 每跨過 10 的倍數才記錄
+  const E=PERF.post,c=CAL.post,snap={at:new Date().toISOString(),n,poor:mem.filter(x=>x.actual&&x.actual<=2).length};
+  if(E){snap.kRule=E.comb&&E.comb.kappa;snap.kCal=E.combCal?E.combCal.kappa:null;snap.sens=E.risk?E.risk.sens:null;}
+  if(c&&c.model){const b=c.model.beta,sm=Math.abs(b[0])+Math.abs(b[1])+Math.abs(b[2])||1;snap.w=[0,1,2].map(i=>Math.round(b[i]/sm*100));snap.tier=calTier(c).k;}
+  snap.base=baseOf('post');
+  hist.push(snap);try{localStorage.setItem(HIST_KEY,JSON.stringify(hist.slice(-200)));}catch(e){}
+}
+function renderHistory(){
+  const el=$('#calhist');if(!el)return;
+  if(!hist.length){el.innerHTML='<p class="sub">累積 10 筆有評分資料後開始記錄。</p>';return;}
+  const f2=v=>v==null?'–':v.toFixed(2);
+  el.innerHTML=`<div class="tw"><table><tr><th>日期</th><th>有評分</th><th>≤2</th><th>Kappa 規則</th><th>Kappa 校正</th><th>校正權重 C/M/N</th><th>採用</th></tr>
+   ${hist.slice().reverse().slice(0,30).map(h=>`<tr><td>${h.at.slice(0,10)}</td><td>${h.n}</td><td>${h.poor}</td><td>${f2(h.kRule)}</td><td>${f2(h.kCal)}</td>
+   <td>${h.w?h.w.join(' / ')+'%':'–'}</td><td>${h.base==='calib'?'校正':'規則'}</td></tr>`).join('')}</table></div>
+   <p class="hint">掃描後模式。規則權重固定為 35 / 40 / 25%，可對照校正權重如何隨資料變化。</p>`;
+}
+function renderBackupNote(){
+  const since=mem.length-(bk.n||0),days=bk.at?Math.floor((Date.now()-new Date(bk.at))/864e5):null;
+  const need=mem.length&&(since>=10||(days!=null&&days>=7&&since>0)||(!bk.at&&mem.length>=5));
+  const html=need?`<div class="note warn">⚠ ${bk.at?`上次下載 CSV 是 ${days} 天前，之後新增了 ${Math.max(0,since)} 筆`:`尚未下載過 CSV 備份（目前 ${mem.length} 筆）`}。資料只存在這個瀏覽器，建議現在備份。<button class="btn" data-dlnow>下載 CSV</button></div>`:'';
+  $('#bkwarn').innerHTML=html;
+  const P=mem.filter(x=>!x.actual).length;
+  $('#topnote').innerHTML=html+(P?`<div class="note">有 <b>${P}</b> 筆受檢者待補登掃描後資料。<button class="btn ghost" data-gopend>前往補登</button></div>`:'');
+  document.querySelectorAll('[data-dlnow]').forEach(b=>b.onclick=()=>$('#dl').click());
+  document.querySelectorAll('[data-gopend]').forEach(b=>b.onclick=()=>{document.querySelector('nav button[data-v="list"]').click();$('#pending').scrollIntoView({behavior:'smooth'});});
+}
 function renderList(){
+  renderPending();renderProgress();renderBackupNote();
   if(!mem.length){$('#tbl').innerHTML='<tr><td class="empty">尚無紀錄</td></tr>';$('#agree').textContent='';return;}
   let n=0,exact=0,within1=0,mae=0;
   const rows=mem.map((d,i)=>{const r=predict(d),G=GRADE[r.grade];
@@ -1286,6 +1374,8 @@ $('#dl').onclick=()=>{
   a.download=`ccta_iq_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.csv`;
   document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);
   $('#msg2').textContent=`已下載 ${mem.length} 筆。`;
+  bk={at:new Date().toISOString(),n:mem.length};try{localStorage.setItem(BK_KEY,JSON.stringify(bk));}catch(e){}
+  renderBackupNote();
 };
 function parseCSV(t){
   const rows=[];let row=[],f='',inq=false;
