@@ -345,6 +345,7 @@ del{color:var(--mute)}
       <b>點此選擇 CSV 檔（可多選）</b>
       <span>或把一批 CSV 檔直接拖曳到這裡</span>
     </label>
+    <label class="chk" style="margin-top:10px"><input type="checkbox" id="impinc"> 不完整的列也匯入（列入待補登，補齊前不參與預測與校正）</label>
     <div id="impres"></div>
     <p class="hint" style="margin-top:10px">或直接貼上 CSV 內容：</p>
     <textarea id="csvin" placeholder="id,req,height,weight,age,sex,hr,hrv,arrhythmia,calc_stent,protocol,kvp,conc,volume,rate,ao_hu,lm_hu,noise,actual_grade&#10;A001,R123,165,70,62,F,58,4,0,0,prospective,100,370,60,5,420,395,24,4"></textarea>
@@ -1272,11 +1273,11 @@ const BK_KEY='ccta_iq_backup',HIST_KEY='ccta_iq_hist';
 let bk={at:null,n:0};try{bk=Object.assign(bk,JSON.parse(localStorage.getItem(BK_KEY)||'{}'));}catch(e){}
 let hist=[];try{hist=JSON.parse(localStorage.getItem(HIST_KEY)||'[]');}catch(e){}
 function renderPending(){
-  const P=mem.filter(x=>!x.actual).sort((a,b)=>String(b.ts).localeCompare(String(a.ts)));
+  const P=mem.filter(x=>!x.actual||!ready(x)).sort((a,b)=>String(b.ts).localeCompare(String(a.ts)));
   $('#pendcnt').textContent=P.length?`（${P.length} 筆）`:'';
   if(!P.length){$('#pending').innerHTML='<p class="sub">沒有待補登的受檢者。</p>';return;}
   $('#pending').innerHTML=`<div class="tw"><table><tr><th></th><th>ID</th><th>日期</th><th>Req</th><th>缺</th><th>掃描前預測</th></tr>
-   ${P.slice(0,50).map(d=>{const r=ready(d)?predict(d):null;const miss=[!(d.ao>0&&d.lm>0)?'HU':'',d.noise==null?'SD':'','評分'].filter(Boolean).join('、');
+   ${P.slice(0,50).map(d=>{const r=ready(d)?predict(d):null;const miss=(ready(d)?[!(d.ao>0&&d.lm>0)?'HU':'',d.noise==null?'SD':'',d.actual?'':'評分']:missingOf(d).concat(d.actual?[]:['評分'])).filter(Boolean).join('、');
      return `<tr><td><button class="btn" style="padding:3px 10px;font-size:13px" data-fill="${esc(d.ts)}">補登</button></td>
      <td><b>${esc(d.id||'–')}</b></td><td>${String(d.ts).slice(0,10)}</td><td>${esc(d.req||'–')}</td><td>${miss}</td>
      <td>${r?`<span class="pill" style="background:${GRADE[r.grade].c}">${r.grade}</span>`:'–'}</td></tr>`;}).join('')}
@@ -1293,7 +1294,7 @@ function pbar(label,v,marks,col){
     <div class="ms">${marks.map(m=>`<span>${m.l} ${m.v}</span>`).join('')}</div></div>`;
 }
 function renderProgress(){
-  const lab=mem.filter(x=>x.actual),poorAll=lab.filter(x=>x.actual<=2).length;
+  const lab=mem.filter(x=>x.actual&&ready(x)),poorAll=lab.filter(x=>x.actual<=2).length;
   const post=lab.filter(x=>x.ao>0&&x.lm>0),poorPost=post.filter(x=>x.actual<=2).length;
   const prev=lab.length?poorAll/lab.length:null;
   let h=pbar('有實際評分的受檢者',lab.length,[{v:40,l:'相似案例滿權重'},{v:100,l:'校正模型最低筆數'}],'var(--acc)');
@@ -1328,7 +1329,7 @@ function renderBackupNote(){
   const need=mem.length&&(since>=10||(days!=null&&days>=7&&since>0)||(!bk.at&&mem.length>=5));
   const html=need?`<div class="note warn">⚠ ${bk.at?`上次下載 CSV 是 ${days} 天前，之後新增了 ${Math.max(0,since)} 筆`:`尚未下載過 CSV 備份（目前 ${mem.length} 筆）`}。資料只存在這個瀏覽器，建議現在備份。<button class="btn" data-dlnow>下載 CSV</button></div>`:'';
   $('#bkwarn').innerHTML=html;
-  const P=mem.filter(x=>!x.actual).length;
+  const P=mem.filter(x=>!x.actual||!ready(x)).length;
   $('#topnote').innerHTML=html+(P?`<div class="note">有 <b>${P}</b> 筆受檢者待補登掃描後資料。<button class="btn ghost" data-gopend>前往補登</button></div>`:'');
   document.querySelectorAll('[data-dlnow]').forEach(b=>b.onclick=()=>$('#dl').click());
   document.querySelectorAll('[data-gopend]').forEach(b=>b.onclick=()=>{document.querySelector('nav button[data-v="list"]').click();$('#pending').scrollIntoView({behavior:'smooth'});});
@@ -1337,7 +1338,10 @@ function renderList(){
   renderPending();renderProgress();renderBackupNote();
   if(!mem.length){$('#tbl').innerHTML='<tr><td class="empty">尚無紀錄</td></tr>';$('#agree').textContent='';return;}
   let n=0,exact=0,within1=0,mae=0;
-  const rows=mem.map((d,i)=>{const r=predict(d),G=GRADE[r.grade];
+  const rows=mem.map((d,i)=>{
+    if(!ready(d))return `<tr><td>${esc(d.id||'')}</td><td>${esc(d.req||'')}</td><td colspan="9" class="warn">資料不完整：缺${missingOf(d).join('、')}${d.actual?`（實際評分 ${d.actual}）`:''}</td>
+      <td><a href="#" data-load="${esc(d.ts||'')}">載入</a> · <a href="#" data-del="${i}" style="color:var(--g1)">刪除</a></td></tr>`;
+    const r=predict(d),G=GRADE[r.grade];
     if(d.actual){n++;const df=Math.abs(d.actual-r.grade);mae+=df;if(!df)exact++;if(df<=1)within1++;}
     return `<tr><td>${esc(d.id||'')}</td><td>${esc(d.req||'')}</td><td>${r.bmi.toFixed(1)}</td><td>${d.hr}</td>
     <td>${PROTO[r.protocol].name}${r.auto?'*':''}</td><td>${r.kvp}</td><td>${r.ao}${r.huEst?'*':''}</td><td>${r.lm}${r.huEst?'*':''}</td>
@@ -1377,11 +1381,19 @@ $('#dl').onclick=()=>{
   bk={at:new Date().toISOString(),n:mem.length};try{localStorage.setItem(BK_KEY,JSON.stringify(bk));}catch(e){}
   renderBackupNote();
 };
-function parseCSV(t){
+// 自動判斷分隔符號：看第一列（欄位名稱列）中逗號、Tab、分號何者最多
+function detectDelim(t){
+  const line=t.slice(0,(t.indexOf('\n')+1||t.length+1)-1);
+  const cnt=c=>line.split(c).length-1;
+  const c={',':cnt(','),'\t':cnt('\t'),';':cnt(';')};
+  return Object.keys(c).sort((a,b)=>c[b]-c[a])[0];
+}
+function parseCSV(t,delim){
+  delim=delim||',';
   const rows=[];let row=[],f='',inq=false;
   for(let i=0;i<t.length;i++){const ch=t[i];
     if(inq){if(ch=='"'){if(t[i+1]=='"'){f+='"';i++;}else inq=false;}else f+=ch;}
-    else if(ch=='"')inq=true;else if(ch==','){row.push(f);f='';}
+    else if(ch=='"'&&f==='')inq=true;else if(ch===delim){row.push(f);f='';}
     else if(ch=='\n'||ch=='\r'){if(ch=='\r'&&t[i+1]=='\n')i++;row.push(f);rows.push(row);row=[];f='';}
     else f+=ch;}
   if(f!==''||row.length){row.push(f);rows.push(row);}
@@ -1390,23 +1402,36 @@ function parseCSV(t){
 // 同一受檢者同一次檢查的判斷依據（無 ts 欄的 CSV 也能去重）
 function parseSex(v){v=String(v||'').trim().toUpperCase();if(/^(M|MALE|男|1)$/.test(v))return 'M';if(/^(F|FEMALE|女|2)$/.test(v))return 'F';return null;}
 function recKey(d){return [d.id,d.req,d.height,d.weight,d.age,d.sex,d.cs?1:0,d.hr,d.vol,d.rate,d.ao,d.lm,d.noise,d.actual].map(v=>v==null?'':String(v).trim()).join('|');}
+const DELIM_NAME={',':'逗號',"\t":'Tab',';':'分號'};
+// 列出一筆資料缺了哪些預測必要項目
+function missingOf(d){
+  const m=[];if(!(d.height>0))m.push('身高');if(!(d.weight>0))m.push('體重');if(!(d.hr>0))m.push('心率');
+  if(!((d.ao>0&&d.lm>0)||(d.rate>0&&d.conc>0)))m.push('HU 或 injection rate');return m;
+}
 function importText(t,quiet){
-  const rows=parseCSV(t.replace(/^﻿/,''));if(rows.length<2){if(!quiet)$('#msg3').textContent='沒有讀到資料列。';return {ok:0,bad:0,dup:0};}
+  t=t.replace(/^\ufeff/,'');const delim=detectDelim(t);
+  const rows=parseCSV(t,delim);if(rows.length<2){if(!quiet)$('#msg3').textContent='沒有讀到資料列。';return {ok:0,bad:0,dup:0,inc:0,why:{},noCol:[],delim};}
   const h=rows[0].map(x=>x.trim().toLowerCase());const ix=k=>h.indexOf(k);
-  let ok=0,bad=0,dup=0,seq=0;const seen=new Set(mem.map(x=>x.ts)),seenK=new Set(mem.map(recKey));
+  const keepInc=$('#impinc')&&$('#impinc').checked;
+  // 找不到的必要欄位
+  const noCol=['height','weight','hr'].filter(k=>ix(k)<0);
+  if(ix('rate')<0&&(ix('ao_hu')<0||ix('lm_hu')<0))noCol.push('rate 或 ao_hu＋lm_hu');
+  let ok=0,bad=0,dup=0,inc=0,seq=0;const why={};const seen=new Set(mem.map(x=>x.ts)),seenK=new Set(mem.map(recKey));
   rows.slice(1).forEach(r=>{const g=k=>{const i=ix(k);return i<0?'':(r[i]||'').trim();};
     let pr=g('protocol').toLowerCase();
     if(pr.startsWith('pro'))pr='prospective';else if(pr.startsWith('ret'))pr='retrospective';
     else if(pr.startsWith('high')||pr.includes('flash'))pr='highpitch';else if(pr.startsWith('wide'))pr='wide';else pr='auto';
-    const d={id:g('id'),req:g('req'),height:num(g('height')),weight:num(g('weight')),age:num(g('age')),sex:parseSex(g('sex')),hr:num(g('hr')),hrv:num(g('hrv')),
+    const d={id:g('id'),req:g('req'),height:num(g('height')),weight:num(g('weight')),age:num(g('age')||g('年齡')),sex:parseSex(g('sex')||g('性別')),hr:num(g('hr')),hrv:num(g('hrv')),
       arr:/^(1|y|yes|true)$/i.test(g('arrhythmia')),cs:/^(1|y|yes|true|是)$/i.test(g('calc_stent')),protocol:pr,kvp:num(g('kvp'))||'auto',conc:num(g('conc'))||370,vol:num(g('volume')),rate:num(g('rate')),ao:num(g('ao_hu')),lm:num(g('lm_hu')),
       noise:num(g('noise')),actual:num(g('actual_grade')),ts:g('ts')||new Date().toISOString()+'-'+(seq++)};
     if(g('hr_type'))d.hrType=g('hr_type');
     if(seen.has(d.ts)||seenK.has(recKey(d))){dup++;return;}
-    if(ready(d)){mem.push(d);seen.add(d.ts);seenK.add(recKey(d));ok++;}else bad++;});
+    if(ready(d)){mem.push(d);seen.add(d.ts);seenK.add(recKey(d));ok++;return;}
+    missingOf(d).forEach(m=>why[m]=(why[m]||0)+1);
+    if(keepInc){mem.push(d);seen.add(d.ts);seenK.add(recKey(d));inc++;}else bad++;});
   store();renderList();render();
-  if(!quiet)$('#msg3').textContent=`匯入 ${ok} 筆${dup?`，${dup} 筆已存在略過`:''}${bad?`，${bad} 筆因缺少必填欄位略過`:''}。`;
-  return {ok,bad,dup};
+  if(!quiet)$('#msg3').textContent=`匯入 ${ok} 筆${inc?`、不完整但已匯入 ${inc} 筆（列入待補登）`:''}${dup?`，${dup} 筆已存在略過`:''}${bad?`，${bad} 筆不完整略過`:''}。`;
+  return {ok,bad,dup,inc,why,noCol,delim};
 }
 $('#imp').onclick=()=>{const t=$('#csvin').value.trim();if(t)importText(t);else $('#msg3').textContent='請貼上 CSV 或選擇檔案。';};
 // 讀檔：先試 UTF-8，失敗再試 Big5（Windows Excel 存的 CSV 常為 Big5）
@@ -1420,18 +1445,21 @@ async function importFiles(list){
   const skipped=list.length-files.length;
   if(!files.length){$('#impres').innerHTML='<p class="warn">沒有可匯入的 CSV 檔。</p>';return;}
   $('#impres').innerHTML=`<p class="sub">匯入中…（${files.length} 個檔案）</p>`;
-  const rows=[];let T={ok:0,dup:0,bad:0};
+  const rows=[];let T={ok:0,dup:0,bad:0,inc:0};const W={};
   for(const f of files){
     let c;
-    try{const txt=await readText(f);c=importText(txt,true);c.err=!c.ok&&!c.dup&&!c.bad?'沒有資料列':'';}
-    catch(e){c={ok:0,dup:0,bad:0,err:'無法讀取'};}
-    rows.push({name:f.name,...c});T.ok+=c.ok;T.dup+=c.dup;T.bad+=c.bad;
+    try{const txt=await readText(f);c=importText(txt,true);c.err=!c.ok&&!c.dup&&!c.bad&&!c.inc?'沒有資料列':'';}
+    catch(e){c={ok:0,dup:0,bad:0,inc:0,why:{},noCol:[],err:'無法讀取'};}
+    rows.push({name:f.name,...c});T.ok+=c.ok;T.dup+=c.dup;T.bad+=c.bad;T.inc+=c.inc||0;
+    Object.entries(c.why||{}).forEach(([k,v])=>W[k]=(W[k]||0)+v);
   }
-  $('#impres').innerHTML=`<p class="sub">完成：${files.length} 個檔案，<b style="color:var(--g4)">匯入 ${T.ok} 筆</b>、略過重複 ${T.dup} 筆、資料不完整 ${T.bad} 筆${skipped?`；${skipped} 個非 CSV 檔未處理`:''}。</p>
-  <div class="tw"><table><tr><th>檔案</th><th>匯入</th><th>重複略過</th><th>不完整</th><th></th></tr>
-  ${rows.map(r=>`<tr><td>${esc(r.name)}</td><td>${r.ok}</td><td>${r.dup}</td><td>${r.bad}</td><td class="warn">${r.err||''}</td></tr>`).join('')}
-  <tr class="tot"><td>合計</td><td>${T.ok}</td><td>${T.dup}</td><td>${T.bad}</td><td></td></tr></table></div>
-  ${T.bad?'<p class="hint">不完整＝缺身高、體重、心率，或同時缺 HU 與 injection rate。</p>':''}`;
+  const whyTxt=Object.entries(W).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`缺${k} ${v} 筆`).join('、');
+  $('#impres').innerHTML=`<p class="sub">完成：${files.length} 個檔案，<b style="color:var(--g4)">可預測 ${T.ok} 筆</b>${T.inc?`、不完整但已匯入 ${T.inc} 筆（列入待補登）`:''}、略過重複 ${T.dup} 筆${T.bad?`、不完整略過 ${T.bad} 筆`:''}${skipped?`；${skipped} 個非 CSV 檔未處理`:''}。</p>
+  <div class="tw"><table><tr><th>檔案</th><th>分隔</th><th>可預測</th><th>不完整</th><th>重複略過</th><th>找不到的欄位</th></tr>
+  ${rows.map(r=>`<tr><td>${esc(r.name)}</td><td>${DELIM_NAME[r.delim]||'–'}</td><td>${r.ok}</td><td>${(r.bad||0)+(r.inc||0)}${r.inc?'（已匯入）':''}</td><td>${r.dup}</td><td class="warn">${r.err||(r.noCol&&r.noCol.length?esc(r.noCol.join('、')):'')}</td></tr>`).join('')}
+  <tr class="tot"><td>合計</td><td></td><td>${T.ok}</td><td>${T.bad+T.inc}</td><td>${T.dup}</td><td></td></tr></table></div>
+  ${whyTxt?`<p class="sub">不完整的原因（一筆可能缺多項）：<b>${whyTxt}</b>。</p>`:''}
+  ${T.bad?'<p class="hint">預測至少需要身高、體重、心率，以及 HU（ao_hu＋lm_hu）或 injection rate 其中一組。勾選上方「不完整的列也匯入」可先匯入，補齊後再預測。</p>':''}`;
   $('#msg3').textContent='';
 }
 $('#file').onchange=e=>{if(e.target.files.length)importFiles(e.target.files);e.target.value='';};
