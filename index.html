@@ -203,7 +203,8 @@ del{color:var(--mute)}
         <label>心率變異 max−min<input name="hrv" type="number" inputmode="numeric" placeholder="選填"></label>
       </div>
       <label class="chk"><input type="checkbox" name="arr"> 心律不整（AF、頻繁 PVC 等）</label>
-      <label class="chk"><input type="checkbox" name="cs"> 鈣化分數過多或有 STENT</label>
+      <label class="chk"><input type="checkbox" name="calc"> 鈣化分數過多</label>
+      <label class="chk"><input type="checkbox" name="stent"> 有 STENT</label>
       <div class="sec">對比劑注射</div>
       <div class="row3">
         <label>Contrast volume (mL)<input name="vol" type="number" step="1" inputmode="decimal"></label>
@@ -353,7 +354,7 @@ del{color:var(--mute)}
   <div class="card" style="margin-top:14px">
     <h2>批次匯入 CSV／Excel</h2>
     <p class="hint">第一列為欄位名稱，欄位：<code>id,req,height,weight,age,sex,hr,hrv,arrhythmia,calc_stent,protocol,kvp,conc,volume,rate,ao_hu,lm_hu,noise,actual_grade</code><br>
-    protocol 可填 prospective / retrospective / highpitch / wide；arrhythmia、calc_stent（鈣化過多或有 STENT）填 1 或 0；conc 為 mgI/mL（空白視為 370）、volume 為 mL、rate 為 mL/s；age、sex（M/F 或 男/女）、hrv、noise、actual_grade、best_phase_pct（%RR）、best_phase_ms（ms）、radiation_dosage_dlp（mGy·cm；也讀「Coronary CTA」欄）、total_calcium_score（Agatston）可留空（actual_grade 請用 4 = 最佳、1 = 無法診斷）；protocol、kvp 留空則自動建議；ao_hu / lm_hu 留空時需有 rate。</p>
+    protocol 可填 prospective / retrospective / highpitch / wide；arrhythmia、calcium_heavy（鈣化分數過多；total_calcium_score > 400 時自動視為 1）、stent（有 STENT）填 1 或 0；conc 為 mgI/mL（空白視為 370）、volume 為 mL、rate 為 mL/s；age、sex（M/F 或 男/女）、hrv、noise、actual_grade、best_phase_pct（%RR）、best_phase_ms（ms）、radiation_dosage_dlp（mGy·cm；也讀「Coronary CTA」欄）、total_calcium_score（Agatston）可留空（actual_grade 請用 4 = 最佳、1 = 無法診斷）；protocol、kvp 留空則自動建議；ao_hu / lm_hu 留空時需有 rate。</p>
     <label class="drop" id="drop">
       <input type="file" id="file" accept=".csv,text/csv,.txt,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple>
       <b>點此選擇 CSV 或 Excel（.xlsx）檔（可多選）</b>
@@ -681,7 +682,11 @@ const KVRULE_KEY='ccta_iq_kvrule';let kvRule='inhouse';
 try{kvRule=localStorage.getItem(KVRULE_KEY)||'inhouse';}catch(e){}
 function kvRec(bmi,wt,cs){return kvRule==='guideline'?{...kvGuideline(bmi,wt,cs),src:'文獻指引'}:{...kvInhouse(bmi,cs),src:'院內參考表'};}
 function autoKvp(bmi,wt,cs){return kvRec(bmi,wt,cs).kv;}
-function kvOf(d,bmi){const k=+d.kvp;return k>0?k:autoKvp(bmi,d.weight,d.cs);}
+// 鈣化過多、有 STENT 分開記錄；舊紀錄只有合併的 cs 旗標，視為有 STENT
+const hasCalc=d=>!!d.calc;
+const hasStent=d=>d.stent!=null?!!d.stent:(d.calc==null&&!!d.cs);
+const csOf=d=>hasCalc(d)||hasStent(d);   // kVp 建議：任一成立就用鈣化／STENT 表
+function kvOf(d,bmi){const k=+d.kvp;return k>0?k:autoKvp(bmi,d.weight,csOf(d));}
 function autoOrder(d){
   // 依心率/心律排列可用 protocol（由最適合開始）
   return ['highpitch','wide','prospective','retrospective'];
@@ -770,7 +775,9 @@ function predictOne(d,proto){
   // --- total
   const sum=WC*c+WM*m+WN*n,worst=Math.min(c,m,n),capped=Math.min(sum,worst+CAP),agp=agePen(d.age);
   let total=capped-agp;
-  if(d.cs)notes.push(['',`鈣化分數過多或有 STENT：blooming artifact 可能影響狹窄判讀；kVp 已依${kvRule==='guideline'?'文獻指引（至少 100）':'院內鈣化 / STENT 參考表'}調整。`]);
+  if(hasCalc(d))notes.push(['',`鈣化分數過多：鈣化斑的 blooming artifact 可能讓狹窄程度被高估。`]);
+  if(hasStent(d))notes.push(['',`有 STENT：金屬與 blooming 偽影會影響支架內管腔的判讀。`]);
+  if(csOf(d)&&!(+d0kvp>0))notes.push(['',`kVp 已依${kvRule==='guideline'?'文獻指引（至少 100）':'院內鈣化 / STENT 參考表'}調整。`]);
   if(d.age>=65){
     notes.push(['',`年齡 ${d.age} 歲，冠狀動脈鈣化機率較高，鈣化斑 blooming 可能影響狹窄判讀。`]);}
   if(d.age>0&&d.age<40&&huEst)notes.push(['',`年齡 ${d.age} 歲，心輸出量通常較高，對比劑稀釋較快，實際強化可能低於估計。`]);
@@ -779,7 +786,7 @@ function predictOne(d,proto){
   const bk={lm,c0,ratio,rp,c,hr,m0,hp,ap,m,noise,n,sum,worst,capped,agp,total,grade,p,sex:d.sex};
   if(!notes.length)notes.push(['','各項參數均在理想範圍內。']);
   const snr=noise>0?ao/noise:null;
-  return {bmi,c:Math.round(c),m:Math.round(m),n:Math.round(n),total,grade,noise,est,snr,ratio,notes,ao,lm,huEst,inj,protocol:proto,kvp,kvAuto:!(+d0kvp>0),kvR:kvRec(bmi,d.weight,d.cs),bk};
+  return {bmi,c:Math.round(c),m:Math.round(m),n:Math.round(n),total,grade,noise,est,snr,ratio,notes,ao,lm,huEst,inj,protocol:proto,kvp,kvAuto:!(+d0kvp>0),kvR:kvRec(bmi,d.weight,csOf(d)),bk};
 }
 
 // ------------- form
@@ -795,7 +802,7 @@ document.querySelectorAll('#mode button').forEach(b=>b.onclick=()=>{setMode(b.da
 function readForm(){
   const g=k=>F.elements[k].value;const post=mode==='post';
   return {id:g('id').trim(),req:g('req').trim(),height:num(g('height')),weight:num(g('weight')),age:num(g('age')),sex:g('sex')||null,
-    hr:num(g('hr')),hrv:num(g('hrv')),arr:F.elements.arr.checked,cs:F.elements.cs.checked,protocol:g('protocol'),
+    hr:num(g('hr')),hrv:num(g('hrv')),arr:F.elements.arr.checked,calc:F.elements.calc.checked,stent:F.elements.stent.checked,protocol:g('protocol'),
     kvp:g('kvp')==='auto'?'auto':+g('kvp'),conc:num(g('conc')),vol:num(g('vol')),rate:num(g('rate')),
     ao:post?num(g('ao')):null,lm:post?num(g('lm')):null,noise:post?num(g('noise')):null,actual:num(g('actual')),
     phasePct:post?num(g('phasePct')):null,phaseMs:post?num(g('phaseMs')):null,dlp:post?num(g('dlp')):null,cac:post?num(g('cac')):null,
@@ -890,7 +897,7 @@ function dlpHint(d){const el=$('#dlphint');if(!el)return;
 // Agatston 鈣化分數分級（常用分級：0、1–10、11–100、101–400、>400）
 function cacGrade(v){return v==null?null:v===0?'無鈣化':v<=10?'極輕微':v<=100?'輕度':v<=400?'中度':'重度';}
 function cacHint(d){const el=$('#cachint');if(!el)return;
-  el.innerHTML=d.cac!=null&&d.cac>=0?`鈣化分數 ${d.cac}：<b>${cacGrade(d.cac)}</b>（0｜1–10｜11–100｜101–400｜>400）。${d.cac>400&&!d.cs?' 鈣化程度高，可考慮勾選上方「鈣化分數過多或有 STENT」。':''}`:'';}
+  el.innerHTML=d.cac!=null&&d.cac>=0?`鈣化分數 ${d.cac}：<b>${cacGrade(d.cac)}</b>（0｜1–10｜11–100｜101–400｜>400）。${d.cac>CAC_HEAVY?(hasCalc(d)?(calcAuto?' 已自動勾選上方「鈣化分數過多」。':''):' 已取消「鈣化分數過多」勾選（手動）。'):''}`:'';}
 function render(){
   const d=readForm();injHint(d);phaseHint(d);dlpHint(d);cacHint(d);
   if(!ready(d)){$('#res').innerHTML='<div class="empty">填入身高、體重、心跳與 injection rate 後即自動計算</div>';renderDB(d,null);return;}
@@ -916,12 +923,20 @@ function render(){
   <div class="sec">影響因素與建議</div>
   <ul class="notes">${r.notes.map(([k,t])=>`<li class="${k}">${t}</li>`).join('')}</ul>`;
 }
+// calcAuto：勾選是工具自動打的；calcManual：使用者手動改過勾選（之後不再自動改，直到分數降回 ≤400 或清除表單）
+let calcAuto=false,calcManual=false;
+F.elements.cac.addEventListener('input',()=>{
+  const v=num(F.elements.cac.value),box=F.elements.calc;
+  if(v!=null&&v>CAC_HEAVY){if(!calcManual&&!box.checked){box.checked=true;calcAuto=true;}}
+  else{if(calcAuto){box.checked=false;}calcAuto=false;calcManual=false;}
+});
+F.elements.calc.addEventListener('change',()=>{calcAuto=false;calcManual=true;});
 F.addEventListener('input',render);F.addEventListener('change',e=>{if(e.target.tagName!=='INPUT'||e.target.type==='checkbox')render();});
 F.addEventListener('submit',e=>e.preventDefault());
-$('#clear').onclick=()=>{F.reset();setEdit(null);render();$('#msg1').textContent='';};
+$('#clear').onclick=()=>{F.reset();calcAuto=false;calcManual=false;setEdit(null);render();$('#msg1').textContent='';};
 $('#demo').onclick=()=>{
   const v={id:'',req:'',height:168,weight:82,age:58,hr:68,hrv:'',protocol:'auto',kvp:'auto',conc:'370',vol:60,rate:5,ao:'',lm:'',noise:'',actual:''};setMode('pre');
-  for(const k in v)F.elements[k].value=v[k];F.elements.arr.checked=false;F.elements.cs.checked=false;setEdit(null);render();
+  for(const k in v)F.elements[k].value=v[k];F.elements.arr.checked=false;F.elements.calc.checked=false;F.elements.stent.checked=false;setEdit(null);render();
 };
 
 // ------------- storage
@@ -948,13 +963,13 @@ function loadRecord(ts){
   ['id','req','height','weight','age','sex','hr','hrv','conc','vol','rate','ao','lm','noise','actual','phasePct','phaseMs','dlp','cac'].forEach(k=>set(k,d[k]));
   set('protocol',d.protocol&&PROTO[d.protocol]?d.protocol:'auto');set('kvp',+d.kvp>0?String(d.kvp):'auto');
   setMode((d.ao>0&&d.lm>0)||d.hrType==='scan'||d.phasePct!=null||d.phaseMs!=null||d.dlp!=null||d.cac!=null?'post':'pre');
-  F.elements.arr.checked=!!d.arr;F.elements.cs.checked=!!d.cs;setEdit(ts);render();
+  calcAuto=false;calcManual=false;F.elements.arr.checked=!!d.arr;F.elements.calc.checked=hasCalc(d);F.elements.stent.checked=hasStent(d);setEdit(ts);render();
   $('#msg1').textContent='已載入資料庫紀錄，修改後按「更新此筆紀錄」。';
   window.scrollTo({top:0,behavior:'smooth'});
 }
 function feat(d,r){
   r=r||predict(d);
-  return {bmi:r.bmi,hr:d.hr,hrv:d.hrv==null?3:d.hrv,arr:d.arr?1:0,protocol:r.protocol,kvp:r.kvp,age:d.age||null,sex:d.sex||null,cs:d.cs===undefined?null:(d.cs?1:0),
+  return {bmi:r.bmi,hr:d.hr,hrv:d.hrv==null?3:d.hrv,arr:d.arr?1:0,protocol:r.protocol,kvp:r.kvp,age:d.age||null,sex:d.sex||null,calc:hasCalc(d)?1:0,stent:hasStent(d)?1:0,
     lm:r.lm,ao:r.ao,noise:r.noise,idr:r.inj?r.inj.idr:null,vol:d.vol||null,pre:r.huEst,noiseEst:r.est};
 }
 function dist(a,b){
@@ -965,7 +980,7 @@ function dist(a,b){
   if(a.idr!=null&&b.idr!=null)t.push([a.idr-b.idr,.3]);
   if(a.age!=null&&b.age!=null)t.push([a.age-b.age,8]);
   if(a.sex&&b.sex)t.push([a.sex===b.sex?0:1,1]);
-  if(a.cs!=null&&b.cs!=null)t.push([(a.cs-b.cs)*2,1]);
+  t.push([(a.calc-b.calc)*2,1],[(a.stent-b.stent)*2,1]);
   if(a.vol!=null&&b.vol!=null)t.push([a.vol-b.vol,10]);
   let s=0;t.forEach(([v,sc])=>{s+=Math.pow(v/sc,2)});
   return Math.sqrt(s/t.length);
@@ -1412,11 +1427,11 @@ $('#delall').onclick=()=>{
 };
 
 // ------------- CSV
-const COLS=['id','req','height','weight','age','sex','hr','hr_type','hrv','arrhythmia','calc_stent','protocol','kvp','conc','volume','rate','ao_hu','lm_hu','noise','actual_grade','best_phase_pct','best_phase_ms','radiation_dosage_dlp','total_calcium_score','date','pred_score','pred_grade','idr','ts'];
+const COLS=['id','req','height','weight','age','sex','hr','hr_type','hrv','arrhythmia','calcium_heavy','stent','calc_stent','protocol','kvp','conc','volume','rate','ao_hu','lm_hu','noise','actual_grade','best_phase_pct','best_phase_ms','radiation_dosage_dlp','total_calcium_score','date','pred_score','pred_grade','idr','ts'];
 const q=v=>{v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
 function buildCSV(){
   return [COLS.join(',')].concat(mem.map(d=>{const r=ready(d)?predict(d):null;
-    return [d.id,d.req,d.height,d.weight,d.age,d.sex||'',d.hr,d.hrType||'',d.hrv,d.arr?1:0,d.cs?1:0,d.protocol,d.kvp,d.conc,d.vol,d.rate,d.ao,d.lm,d.noise,d.actual,d.phasePct,d.phaseMs,d.dlp,d.cac,d.date||'',
+    return [d.id,d.req,d.height,d.weight,d.age,d.sex||'',d.hr,d.hrType||'',d.hrv,d.arr?1:0,hasCalc(d)?1:0,hasStent(d)?1:0,csOf(d)?1:0,d.protocol,d.kvp,d.conc,d.vol,d.rate,d.ao,d.lm,d.noise,d.actual,d.phasePct,d.phaseMs,d.dlp,d.cac,d.date||'',
       r?r.total:'',r?r.grade:'',r&&r.inj?r.inj.idr.toFixed(2):'',d.ts].map(q).join(',');})).join('\n');
 }
 $('#exp').onclick=async()=>{
@@ -1454,7 +1469,7 @@ function parseCSV(t,delim){
 }
 // 同一受檢者同一次檢查的判斷依據（無 ts 欄的 CSV 也能去重）
 function parseSex(v){v=String(v||'').trim().toUpperCase();if(/^(M|MALE|男|1)$/.test(v))return 'M';if(/^(F|FEMALE|女|2)$/.test(v))return 'F';return null;}
-function recKey(d){return [d.id,d.req,d.height,d.weight,d.age,d.sex,d.cs?1:0,d.hr,d.vol,d.rate,d.ao,d.lm,d.noise,d.actual,d.phasePct,d.phaseMs,d.dlp,d.cac].map(v=>v==null?'':String(v).trim()).join('|');}
+function recKey(d){return [d.id,d.req,d.height,d.weight,d.age,d.sex,hasCalc(d)?1:0,hasStent(d)?1:0,d.hr,d.vol,d.rate,d.ao,d.lm,d.noise,d.actual,d.phasePct,d.phaseMs,d.dlp,d.cac].map(v=>v==null?'':String(v).trim()).join('|');}
 const DELIM_NAME={',':'逗號',"\t":'Tab',';':'分號'};
 // 列出一筆資料缺了哪些預測必要項目
 function missingOf(d){
@@ -1469,6 +1484,10 @@ const ALIAS={id:['history_number','hisno'],req:['request_number'],age:['年齡']
 function firstNum(v){const m=/([0-9]+(?:\.[0-9]+)?)/.exec(String(v||''));return m?parseFloat(m[1]):null;}
 function parseDLP(v){v=String(v||'');if(!v.trim())return null;
   const m=/dlp[^0-9]*([0-9]+(?:\.[0-9]+)?)/i.exec(v)||/([0-9]+(?:\.[0-9]+)?)/.exec(v);return m?parseFloat(m[1]):null;}
+// 鈣化分數超過此值，匯入時自動勾選「鈣化分數過多」
+const CAC_HEAVY=400;
+// 院內 stent 欄：1（含 1.0）、是、有、yes、true 視為有支架
+const STENT_YES=/^(1(\.0+)?|y|yes|true|是|有)$/i;
 function mapProto(v){
   v=String(v||'').toLowerCase();
   if(/flash|high.?pitch/.test(v))return 'highpitch';
@@ -1492,11 +1511,15 @@ function importText(t,quiet){
     const g=k=>{let v=raw(k);if(v!==''||!ALIAS[k])return v;for(const a of ALIAS[k]){v=raw(a);if(v!==''){used[k]=used[k]||new Set();used[k].add(a);return v;}}return '';};
     const protoRaw=g('protocol'),pr=mapProto(protoRaw);
     const d={id:g('id'),req:g('req'),height:num(g('height')),weight:num(g('weight')),age:num(g('age')),sex:parseSex(g('sex')),hr:num(g('hr')),hrv:num(g('hrv')),
-      arr:/^(1|y|yes|true)$/i.test(g('arrhythmia')),cs:/^(1|y|yes|true|是)$/i.test(g('calc_stent'))||/支架/.test(protoRaw),protocol:pr,kvp:num(g('kvp'))||'auto',conc:num(g('conc'))||370,vol:num(g('volume')),rate:num(g('rate')),ao:num(g('ao_hu')),lm:num(g('lm_hu')),
+      arr:/^(1|y|yes|true)$/i.test(g('arrhythmia')),
+      calc:STENT_YES.test(raw('calcium_heavy')),
+      // 有 STENT：stent 欄為 1、掃描模式含「支架」，或舊版 CSV 的合併欄 calc_stent（無分開欄位時）
+      stent:STENT_YES.test(raw('stent'))||/支架/.test(protoRaw)||(ix('calcium_heavy')<0&&ix('stent')<0&&/^(1|y|yes|true|是)$/i.test(raw('calc_stent'))),protocol:pr,kvp:num(g('kvp'))||'auto',conc:num(g('conc'))||370,vol:num(g('volume')),rate:num(g('rate')),ao:num(g('ao_hu')),lm:num(g('lm_hu')),
       noise:num(g('noise')),actual:num(g('actual_grade')),date:g('date')||null,ts:g('ts')||new Date().toISOString()+'-'+(seq++)};
-    if(/支架/.test(protoRaw)){used.calc_stent=used.calc_stent||new Set(['掃描模式（含「支架」）']);}
+    if(/支架/.test(protoRaw)){used.stent=used.stent||new Set();used.stent.add('掃描模式（含「支架」）');}
     { // best_phase_pct、best_phase_ms 各一欄；也接受單一 best_phase 欄寫成 75%、350ms
       d.phasePct=num(g('best_phase_pct'));d.phaseMs=num(g('best_phase_ms'));d.dlp=parseDLP(g('radiation_dosage_dlp'));d.cac=firstNum(g('total_calcium_score'));
+      if(d.cac!=null&&d.cac>CAC_HEAVY&&!d.calc){d.calc=true;used.calcium_heavy=used.calcium_heavy||new Set();used.calcium_heavy.add(`total_calcium_score > ${CAC_HEAVY}`);}
       const raw=g('best_phase');
       if(raw&&d.phasePct==null&&d.phaseMs==null){const u=(g('best_phase_unit')+' '+raw).toLowerCase();if(/ms/.test(u))d.phaseMs=num(raw);else d.phasePct=num(raw);}}
     if(raw('hr_type'))d.hrType=raw('hr_type');else if(used.hr&&raw('hr')===''&&d.hr!=null)d.hrType='scan';   // 心搏速度＝掃描時心率
