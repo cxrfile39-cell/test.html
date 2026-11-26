@@ -351,12 +351,12 @@ del{color:var(--mute)}
     <textarea id="csvout" class="hidden" readonly></textarea>
   </div>
   <div class="card" style="margin-top:14px">
-    <h2>批次匯入 CSV</h2>
+    <h2>批次匯入 CSV／Excel</h2>
     <p class="hint">第一列為欄位名稱，欄位：<code>id,req,height,weight,age,sex,hr,hrv,arrhythmia,calc_stent,protocol,kvp,conc,volume,rate,ao_hu,lm_hu,noise,actual_grade</code><br>
     protocol 可填 prospective / retrospective / highpitch / wide；arrhythmia、calc_stent（鈣化過多或有 STENT）填 1 或 0；conc 為 mgI/mL（空白視為 370）、volume 為 mL、rate 為 mL/s；age、sex（M/F 或 男/女）、hrv、noise、actual_grade、best_phase_pct（%RR）、best_phase_ms（ms）、radiation_dosage_dlp（mGy·cm；也讀「Coronary CTA」欄）、total_calcium_score（Agatston）可留空（actual_grade 請用 4 = 最佳、1 = 無法診斷）；protocol、kvp 留空則自動建議；ao_hu / lm_hu 留空時需有 rate。</p>
     <label class="drop" id="drop">
-      <input type="file" id="file" accept=".csv,text/csv,.txt" multiple>
-      <b>點此選擇 CSV 檔（可多選）</b>
+      <input type="file" id="file" accept=".csv,text/csv,.txt,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple>
+      <b>點此選擇 CSV 或 Excel（.xlsx）檔（可多選）</b>
       <span>或把一批 CSV 檔直接拖曳到這裡</span>
     </label>
     <label class="chk" style="margin-top:10px"><input type="checkbox" id="impinc"> 不完整的列也匯入（列入待補登，補齊前不參與預測與校正）</label>
@@ -1516,23 +1516,95 @@ async function readText(f){
   try{return new TextDecoder('utf-8',{fatal:true}).decode(buf);}
   catch(e){try{return new TextDecoder('big5').decode(buf);}catch(e2){return new TextDecoder('utf-8').decode(buf);}}
 }
+// ===================== Excel (.xlsx) 讀取：不用外部套件、不需網路 =====================
+// .xlsx = ZIP 壓縮的 XML；用瀏覽器內建的 DecompressionStream 解壓，再讀第一個工作表
+async function unzip(buf){
+  const dv=new DataView(buf),u8=new Uint8Array(buf),files={};
+  let eocd=-1;for(let i=buf.byteLength-22;i>=Math.max(0,buf.byteLength-65557);i--){if(dv.getUint32(i,true)===0x06054b50){eocd=i;break;}}
+  if(eocd<0)throw new Error('不是有效的 .xlsx 檔');
+  const n=dv.getUint16(eocd+10,true);let p=dv.getUint32(eocd+16,true);
+  const dec=new TextDecoder();
+  for(let k=0;k<n;k++){
+    if(dv.getUint32(p,true)!==0x02014b50)break;
+    const method=dv.getUint16(p+10,true),csize=dv.getUint32(p+20,true),nl=dv.getUint16(p+28,true),el=dv.getUint16(p+30,true),cl=dv.getUint16(p+32,true),off=dv.getUint32(p+42,true);
+    const name=dec.decode(u8.subarray(p+46,p+46+nl));
+    files[name]={method,csize,off};p+=46+nl+el+cl;
+  }
+  return async name=>{
+    const f=files[name];if(!f)return null;
+    const ln=dv.getUint16(f.off+26,true),le=dv.getUint16(f.off+28,true),start=f.off+30+ln+le;
+    const data=u8.subarray(start,start+f.csize);
+    if(f.method===0)return dec.decode(data);
+    if(f.method!==8)throw new Error('不支援的壓縮格式');
+    if(typeof DecompressionStream==='undefined')throw new Error('瀏覽器版本太舊，無法讀取 .xlsx');
+    const out=await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer();
+    return dec.decode(out);
+  };
+}
+const xmlDoc=t=>new DOMParser().parseFromString(t,'application/xml');
+const byTag=(el,tag)=>[...el.getElementsByTagNameNS('*',tag)];
+async function readXlsx(f){
+  const get=await unzip(await f.arrayBuffer());
+  // 第一個工作表的路徑
+  let sheetPath='xl/worksheets/sheet1.xml',sheetName='';
+  const wb=await get('xl/workbook.xml'),rels=await get('xl/_rels/workbook.xml.rels');
+  if(wb){const sh=byTag(xmlDoc(wb),'sheet')[0];
+    if(sh){sheetName=sh.getAttribute('name')||'';const rid=sh.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id')||sh.getAttribute('r:id');
+      if(rels&&rid){const rel=byTag(xmlDoc(rels),'Relationship').find(r=>r.getAttribute('Id')===rid);
+        if(rel){const t=rel.getAttribute('Target');sheetPath=t.startsWith('/')?t.slice(1):'xl/'+t.replace(/^\.\//,'');}}}}
+  // 共用字串
+  const ssx=await get('xl/sharedStrings.xml');
+  const ss=ssx?byTag(xmlDoc(ssx),'si').map(si=>byTag(si,'t').map(t=>t.textContent).join('')):[];
+  // 日期格式（數字存成序號，需轉成日期）
+  const dateXf=new Set();const stx=await get('xl/styles.xml');
+  if(stx){const sd=xmlDoc(stx),fmt={};byTag(sd,'numFmt').forEach(n=>fmt[n.getAttribute('numFmtId')]=n.getAttribute('formatCode')||'');
+    const xfs=byTag(sd,'cellXfs')[0];if(xfs)[...xfs.children].forEach((xf,i)=>{const id=+xf.getAttribute('numFmtId');
+      const code=(fmt[id]||'').replace(/"[^"]*"|\[[^\]]*\]/g,'');
+      if((id>=14&&id<=22)||(id>=27&&id<=36)||(id>=45&&id<=47)||(id>=50&&id<=58)||(fmt[id]&&/[dy]/i.test(code)))dateXf.add(i);});}
+  const sx=await get(sheetPath);if(!sx)throw new Error('找不到工作表');
+  const colIdx=ref=>{const m=/^[A-Z]+/.exec(ref||'');if(!m)return -1;let n=0;for(const ch of m[0])n=n*26+ch.charCodeAt(0)-64;return n-1;};
+  const rows=[];
+  byTag(xmlDoc(sx),'row').forEach(r=>{
+    const row=[];let next=0;
+    byTag(r,'c').forEach(c=>{
+      let ci=colIdx(c.getAttribute('r'));if(ci<0)ci=next;next=ci+1;
+      const t=c.getAttribute('t'),v=byTag(c,'v')[0],sIdx=+c.getAttribute('s');let val='';
+      if(t==='s')val=v?(ss[+v.textContent]||''):'';
+      else if(t==='inlineStr')val=byTag(c,'t').map(x=>x.textContent).join('');
+      else if(t==='b')val=v&&v.textContent==='1'?'1':'0';
+      else val=v?v.textContent:'';
+      if((!t||t==='n')&&val!==''&&dateXf.has(sIdx)&&!isNaN(+val)){const d=new Date(Math.round((+val-25569)*864e5));if(!isNaN(d))val=d.toISOString().slice(0,10);}
+      row[ci]=val;
+    });
+    for(let i=0;i<row.length;i++)if(row[i]==null)row[i]='';
+    rows.push(row);
+  });
+  // 轉成 CSV 文字，沿用同一套匯入流程
+  const qq=v=>{v=String(v==null?'':v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
+  return {text:rows.map(r=>r.map(qq).join(',')).join('\n'),sheet:sheetName};
+}
 async function importFiles(list){
-  const files=[...list].filter(f=>/\.(csv|txt)$/i.test(f.name)||/csv|text/.test(f.type));
+  const files=[...list].filter(f=>/\.(csv|txt|xlsx|xls)$/i.test(f.name)||/csv|text|spreadsheetml/.test(f.type));
   const skipped=list.length-files.length;
-  if(!files.length){$('#impres').innerHTML='<p class="warn">沒有可匯入的 CSV 檔。</p>';return;}
+  if(!files.length){$('#impres').innerHTML='<p class="warn">沒有可匯入的 CSV 或 Excel 檔。</p>';return;}
   $('#impres').innerHTML=`<p class="sub">匯入中…（${files.length} 個檔案）</p>`;
   const rows=[];let T={ok:0,dup:0,bad:0,inc:0};const W={};
   for(const f of files){
     let c;
-    try{const txt=await readText(f);c=importText(txt,true);c.err=!c.ok&&!c.dup&&!c.bad&&!c.inc?'沒有資料列':'';}
-    catch(e){c={ok:0,dup:0,bad:0,inc:0,why:{},noCol:[],err:'無法讀取'};}
+    try{
+      if(/\.xls$/i.test(f.name))throw new Error('舊版 .xls 不支援，請在 Excel 另存為 .xlsx 或 .csv');
+      let txt,sheet='';
+      if(/\.xlsx$/i.test(f.name)||/spreadsheetml/.test(f.type)){const x=await readXlsx(f);txt=x.text;sheet=x.sheet;}
+      else txt=await readText(f);
+      c=importText(txt,true);c.sheet=sheet;c.err=!c.ok&&!c.dup&&!c.bad&&!c.inc?'沒有資料列':'';}
+    catch(e){c={ok:0,dup:0,bad:0,inc:0,why:{},noCol:[],err:e&&e.message?e.message:'無法讀取'};}
     rows.push({name:f.name,...c});T.ok+=c.ok;T.dup+=c.dup;T.bad+=c.bad;T.inc+=c.inc||0;
     Object.entries(c.why||{}).forEach(([k,v])=>W[k]=(W[k]||0)+v);
   }
   const whyTxt=Object.entries(W).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`缺${k} ${v} 筆`).join('、');
   $('#impres').innerHTML=`<p class="sub">完成：${files.length} 個檔案，<b style="color:var(--g4)">可預測 ${T.ok} 筆</b>${T.inc?`、不完整但已匯入 ${T.inc} 筆（列入待補登）`:''}、略過重複 ${T.dup} 筆${T.bad?`、不完整略過 ${T.bad} 筆`:''}${skipped?`；${skipped} 個非 CSV 檔未處理`:''}。</p>
   <div class="tw"><table><tr><th>檔案</th><th>分隔</th><th>可預測</th><th>不完整</th><th>重複略過</th><th>找不到的欄位</th></tr>
-  ${rows.map(r=>`<tr><td>${esc(r.name)}</td><td>${DELIM_NAME[r.delim]||'–'}</td><td>${r.ok}</td><td>${(r.bad||0)+(r.inc||0)}${r.inc?'（已匯入）':''}</td><td>${r.dup}</td><td class="warn">${r.err||(r.noCol&&r.noCol.length?esc(r.noCol.join('、')):'')}</td></tr>`).join('')}
+  ${rows.map(r=>`<tr><td>${esc(r.name)}${r.sheet?`<span class="sub">（工作表：${esc(r.sheet)}）</span>`:''}</td><td>${r.sheet?'Excel':(DELIM_NAME[r.delim]||'–')}</td><td>${r.ok}</td><td>${(r.bad||0)+(r.inc||0)}${r.inc?'（已匯入）':''}</td><td>${r.dup}</td><td class="warn">${r.err||(r.noCol&&r.noCol.length?esc(r.noCol.join('、')):'')}</td></tr>`).join('')}
   <tr class="tot"><td>合計</td><td></td><td>${T.ok}</td><td>${T.bad+T.inc}</td><td>${T.dup}</td><td></td></tr></table></div>
   ${rows.some(r=>r.map&&r.map.length)?`<p class="sub">欄位對應：${[...new Set(rows.flatMap(r=>r.map||[]))].map(esc).join('；')}。</p>`:''}
   ${whyTxt?`<p class="sub">不完整的原因（一筆可能缺多項）：<b>${whyTxt}</b>。</p>`:''}
