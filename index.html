@@ -250,6 +250,12 @@ del{color:var(--mute)}
         </div>
         <div class="hint">Best phase for reconstruction：可只填 %RR、只填 ms，或兩者都填。</div>
         <div class="hint" id="phasehint"></div>
+        <div class="row" style="margin-top:10px">
+          <label>Radiation dosage DLP (mGy·cm)<input name="dlp" type="number" step="0.1" inputmode="decimal" placeholder="選填"></label>
+          <label>Total calcium score (Agatston)<input name="cac" type="number" step="0.1" min="0" inputmode="decimal" placeholder="選填"></label>
+        </div>
+        <div class="hint" id="dlphint"></div>
+        <div class="hint" id="cachint"></div>
       </div>
       <details class="def">
         <summary>量測定義</summary>
@@ -290,6 +296,7 @@ del{color:var(--mute)}
   <div class="card">
     <h2>待補登 <span class="hint" style="font-weight:400" id="pendcnt"></span></h2>
     <p class="hint">掃描前存的受檢者，掃描後按「補登」填入實測 HU、SD 與實際評分；有實際評分的資料才會用來調整公式。</p>
+    <input id="pendq" type="search" placeholder="搜尋 ID、Req 或日期" style="max-width:320px;margin-bottom:8px">
     <div id="pending"></div>
   </div>
   <div class="card" style="margin-top:14px">
@@ -346,7 +353,7 @@ del{color:var(--mute)}
   <div class="card" style="margin-top:14px">
     <h2>批次匯入 CSV</h2>
     <p class="hint">第一列為欄位名稱，欄位：<code>id,req,height,weight,age,sex,hr,hrv,arrhythmia,calc_stent,protocol,kvp,conc,volume,rate,ao_hu,lm_hu,noise,actual_grade</code><br>
-    protocol 可填 prospective / retrospective / highpitch / wide；arrhythmia、calc_stent（鈣化過多或有 STENT）填 1 或 0；conc 為 mgI/mL（空白視為 370）、volume 為 mL、rate 為 mL/s；age、sex（M/F 或 男/女）、hrv、noise、actual_grade、best_phase_pct（%RR）、best_phase_ms（ms）可留空（actual_grade 請用 4 = 最佳、1 = 無法診斷）；protocol、kvp 留空則自動建議；ao_hu / lm_hu 留空時需有 rate。</p>
+    protocol 可填 prospective / retrospective / highpitch / wide；arrhythmia、calc_stent（鈣化過多或有 STENT）填 1 或 0；conc 為 mgI/mL（空白視為 370）、volume 為 mL、rate 為 mL/s；age、sex（M/F 或 男/女）、hrv、noise、actual_grade、best_phase_pct（%RR）、best_phase_ms（ms）、radiation_dosage_dlp（mGy·cm；也讀「Coronary CTA」欄）、total_calcium_score（Agatston）可留空（actual_grade 請用 4 = 最佳、1 = 無法診斷）；protocol、kvp 留空則自動建議；ao_hu / lm_hu 留空時需有 rate。</p>
     <label class="drop" id="drop">
       <input type="file" id="file" accept=".csv,text/csv,.txt" multiple>
       <b>點此選擇 CSV 檔（可多選）</b>
@@ -791,7 +798,7 @@ function readForm(){
     hr:num(g('hr')),hrv:num(g('hrv')),arr:F.elements.arr.checked,cs:F.elements.cs.checked,protocol:g('protocol'),
     kvp:g('kvp')==='auto'?'auto':+g('kvp'),conc:num(g('conc')),vol:num(g('vol')),rate:num(g('rate')),
     ao:post?num(g('ao')):null,lm:post?num(g('lm')):null,noise:post?num(g('noise')):null,actual:num(g('actual')),
-    phasePct:post?num(g('phasePct')):null,phaseMs:post?num(g('phaseMs')):null,
+    phasePct:post?num(g('phasePct')):null,phaseMs:post?num(g('phaseMs')):null,dlp:post?num(g('dlp')):null,cac:post?num(g('cac')):null,
     hrType:post?'scan':'rest'};
 }
 const ready=d=>d.height>0&&d.weight>0&&d.hr>0&&((d.ao>0&&d.lm>0)||(d.rate>0&&d.conc>0));
@@ -876,8 +883,16 @@ function phaseHint(d){
   if(P.cycle)t+=`；大約落在<b>${P.cycle}</b>（以 50% RR 粗分）`;
   el.innerHTML=t+'。';
 }
+// 有效劑量估算：E ≈ DLP × k，胸部 k = 0.014 mSv/(mGy·cm)（冠狀動脈 CTA 研究常用）
+const DLP_K=0.014;
+function dlpHint(d){const el=$('#dlphint');if(!el)return;
+  el.textContent=d.dlp>0?`有效劑量估算約 ${(d.dlp*DLP_K).toFixed(2)} mSv（DLP × 0.014；不同文獻的換算係數不同，僅供參考）。`:'';}
+// Agatston 鈣化分數分級（常用分級：0、1–10、11–100、101–400、>400）
+function cacGrade(v){return v==null?null:v===0?'無鈣化':v<=10?'極輕微':v<=100?'輕度':v<=400?'中度':'重度';}
+function cacHint(d){const el=$('#cachint');if(!el)return;
+  el.innerHTML=d.cac!=null&&d.cac>=0?`鈣化分數 ${d.cac}：<b>${cacGrade(d.cac)}</b>（0｜1–10｜11–100｜101–400｜>400）。${d.cac>400&&!d.cs?' 鈣化程度高，可考慮勾選上方「鈣化分數過多或有 STENT」。':''}`:'';}
 function render(){
-  const d=readForm();injHint(d);phaseHint(d);
+  const d=readForm();injHint(d);phaseHint(d);dlpHint(d);cacHint(d);
   if(!ready(d)){$('#res').innerHTML='<div class="empty">填入身高、體重、心跳與 injection rate 後即自動計算</div>';renderDB(d,null);return;}
   const r=predict(d),G=GRADE[r.grade];renderDB(d,r);
   $('#res').innerHTML=`
@@ -918,7 +933,8 @@ $('#save').onclick=()=>{
   const d=readForm();
   if(!ready(d)){$('#msg1').textContent='請先填齊必填欄位。';return;}
   const i=editTs?mem.findIndex(x=>x.ts===editTs):-1;
-  if(i>=0){d.ts=editTs;mem[i]=d;store();renderList();render();$('#msg1').textContent='已更新此筆紀錄。';return;}
+  if(i>=0){d.ts=editTs;mem[i]={...mem[i],...d};   // 保留表單上沒有的欄位（如檢查日期）
+    store();renderList();render();$('#msg1').textContent='已更新此筆紀錄。';return;}
   d.ts=new Date().toISOString();mem.unshift(d);store();setEdit(d.ts);renderList();render();
   $('#msg1').textContent=d.actual?`已儲存（共 ${mem.length} 筆）。`:`已儲存（共 ${mem.length} 筆）。掃描後可在「資料庫 → 待補登」補上實測值與評分。`;
 };
@@ -929,9 +945,9 @@ function setEdit(ts){editTs=ts;$('#save').textContent=ts?'更新此筆紀錄':'�
 function loadRecord(ts){
   const d=mem.find(x=>x.ts===ts);if(!d)return;
   const set=(k,v)=>{F.elements[k].value=v==null?'':v;};
-  ['id','req','height','weight','age','sex','hr','hrv','conc','vol','rate','ao','lm','noise','actual','phasePct','phaseMs'].forEach(k=>set(k,d[k]));
+  ['id','req','height','weight','age','sex','hr','hrv','conc','vol','rate','ao','lm','noise','actual','phasePct','phaseMs','dlp','cac'].forEach(k=>set(k,d[k]));
   set('protocol',d.protocol&&PROTO[d.protocol]?d.protocol:'auto');set('kvp',+d.kvp>0?String(d.kvp):'auto');
-  setMode((d.ao>0&&d.lm>0)||d.hrType==='scan'||d.phasePct!=null||d.phaseMs!=null?'post':'pre');
+  setMode((d.ao>0&&d.lm>0)||d.hrType==='scan'||d.phasePct!=null||d.phaseMs!=null||d.dlp!=null||d.cac!=null?'post':'pre');
   F.elements.arr.checked=!!d.arr;F.elements.cs.checked=!!d.cs;setEdit(ts);render();
   $('#msg1').textContent='已載入資料庫紀錄，修改後按「更新此筆紀錄」。';
   window.scrollTo({top:0,behavior:'smooth'});
@@ -1305,15 +1321,19 @@ const BK_KEY='ccta_iq_backup',HIST_KEY='ccta_iq_hist';
 let bk={at:null,n:0};try{bk=Object.assign(bk,JSON.parse(localStorage.getItem(BK_KEY)||'{}'));}catch(e){}
 let hist=[];try{hist=JSON.parse(localStorage.getItem(HIST_KEY)||'[]');}catch(e){}
 function renderPending(){
-  const P=mem.filter(x=>!x.actual||!ready(x)).sort((a,b)=>String(b.ts).localeCompare(String(a.ts)));
-  $('#pendcnt').textContent=P.length?`（${P.length} 筆）`:'';
-  if(!P.length){$('#pending').innerHTML='<p class="sub">沒有待補登的受檢者。</p>';return;}
+  const day=d=>String(d.date||d.ts||'').slice(0,10);
+  const all=mem.filter(x=>!x.actual||!ready(x)).sort((a,b)=>day(b).localeCompare(day(a)));
+  $('#pendcnt').textContent=all.length?`（${all.length} 筆）`:'';
+  if(!all.length){$('#pending').innerHTML='<p class="sub">沒有待補登的受檢者。</p>';return;}
+  const qv=(($('#pendq')||{}).value||'').trim().toLowerCase();
+  const P=qv?all.filter(d=>[d.id,d.req,day(d)].some(v=>String(v||'').toLowerCase().includes(qv))):all;
+  if(!P.length){$('#pending').innerHTML='<p class="sub">找不到符合的受檢者。</p>';return;}
   $('#pending').innerHTML=`<div class="tw"><table><tr><th></th><th>ID</th><th>日期</th><th>Req</th><th>缺</th><th>掃描前預測</th></tr>
    ${P.slice(0,50).map(d=>{const r=ready(d)?predict(d):null;const miss=(ready(d)?[!(d.ao>0&&d.lm>0)?'HU':'',d.noise==null?'SD':'',d.actual?'':'評分']:missingOf(d).concat(d.actual?[]:['評分'])).filter(Boolean).join('、');
      return `<tr><td><button class="btn" style="padding:3px 10px;font-size:13px" data-fill="${esc(d.ts)}">補登</button></td>
-     <td><b>${esc(d.id||'–')}</b></td><td>${String(d.ts).slice(0,10)}</td><td>${esc(d.req||'–')}</td><td>${miss}</td>
+     <td><b>${esc(d.id||'–')}</b></td><td>${day(d)}</td><td>${esc(d.req||'–')}</td><td>${miss}</td>
      <td>${r?`<span class="pill" style="background:${GRADE[r.grade].c}">${r.grade}</span>`:'–'}</td></tr>`;}).join('')}
-   </table></div>${P.length>50?`<p class="hint">僅列出最近 50 筆。</p>`:''}`;
+   </table></div>${P.length>50?`<p class="hint">${qv?'符合':'共'} ${P.length} 筆，列出最近 50 筆；可用上方搜尋找特定受檢者。</p>`:''}`;
   document.querySelectorAll('#pending [data-fill]').forEach(b=>b.onclick=()=>{
     document.querySelector('nav button[data-v="pred"]').click();loadRecord(b.dataset.fill);setMode('post');render();
     $('#msg1').textContent='補登模式：填入 Aortic root / LM HU、SD 與實際評分後，按「更新此筆紀錄」。';});
@@ -1366,6 +1386,7 @@ function renderBackupNote(){
   document.querySelectorAll('[data-dlnow]').forEach(b=>b.onclick=()=>$('#dl').click());
   document.querySelectorAll('[data-gopend]').forEach(b=>b.onclick=()=>{document.querySelector('nav button[data-v="list"]').click();$('#pending').scrollIntoView({behavior:'smooth'});});
 }
+$('#pendq').addEventListener('input',()=>renderPending());
 function renderList(){
   renderPending();renderProgress();renderBackupNote();
   if(!mem.length){$('#tbl').innerHTML='<tr><td class="empty">尚無紀錄</td></tr>';$('#agree').textContent='';return;}
@@ -1391,11 +1412,11 @@ $('#delall').onclick=()=>{
 };
 
 // ------------- CSV
-const COLS=['id','req','height','weight','age','sex','hr','hr_type','hrv','arrhythmia','calc_stent','protocol','kvp','conc','volume','rate','ao_hu','lm_hu','noise','actual_grade','best_phase_pct','best_phase_ms','pred_score','pred_grade','idr','ts'];
+const COLS=['id','req','height','weight','age','sex','hr','hr_type','hrv','arrhythmia','calc_stent','protocol','kvp','conc','volume','rate','ao_hu','lm_hu','noise','actual_grade','best_phase_pct','best_phase_ms','radiation_dosage_dlp','total_calcium_score','date','pred_score','pred_grade','idr','ts'];
 const q=v=>{v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
 function buildCSV(){
   return [COLS.join(',')].concat(mem.map(d=>{const r=ready(d)?predict(d):null;
-    return [d.id,d.req,d.height,d.weight,d.age,d.sex||'',d.hr,d.hrType||'',d.hrv,d.arr?1:0,d.cs?1:0,d.protocol,d.kvp,d.conc,d.vol,d.rate,d.ao,d.lm,d.noise,d.actual,d.phasePct,d.phaseMs,
+    return [d.id,d.req,d.height,d.weight,d.age,d.sex||'',d.hr,d.hrType||'',d.hrv,d.arr?1:0,d.cs?1:0,d.protocol,d.kvp,d.conc,d.vol,d.rate,d.ao,d.lm,d.noise,d.actual,d.phasePct,d.phaseMs,d.dlp,d.cac,d.date||'',
       r?r.total:'',r?r.grade:'',r&&r.inj?r.inj.idr.toFixed(2):'',d.ts].map(q).join(',');})).join('\n');
 }
 $('#exp').onclick=async()=>{
@@ -1433,12 +1454,28 @@ function parseCSV(t,delim){
 }
 // 同一受檢者同一次檢查的判斷依據（無 ts 欄的 CSV 也能去重）
 function parseSex(v){v=String(v||'').trim().toUpperCase();if(/^(M|MALE|男|1)$/.test(v))return 'M';if(/^(F|FEMALE|女|2)$/.test(v))return 'F';return null;}
-function recKey(d){return [d.id,d.req,d.height,d.weight,d.age,d.sex,d.cs?1:0,d.hr,d.vol,d.rate,d.ao,d.lm,d.noise,d.actual,d.phasePct,d.phaseMs].map(v=>v==null?'':String(v).trim()).join('|');}
+function recKey(d){return [d.id,d.req,d.height,d.weight,d.age,d.sex,d.cs?1:0,d.hr,d.vol,d.rate,d.ao,d.lm,d.noise,d.actual,d.phasePct,d.phaseMs,d.dlp,d.cac].map(v=>v==null?'':String(v).trim()).join('|');}
 const DELIM_NAME={',':'逗號',"\t":'Tab',';':'分號'};
 // 列出一筆資料缺了哪些預測必要項目
 function missingOf(d){
   const m=[];if(!(d.height>0))m.push('身高');if(!(d.weight>0))m.push('體重');if(!(d.hr>0))m.push('心率');
   if(!((d.ao>0&&d.lm>0)||(d.rate>0&&d.conc>0)))m.push('HU 或 injection rate');return m;
+}
+// 院內資料表的欄位名稱對應（工具欄位空白或不存在時，依序改讀這些欄）
+const ALIAS={id:['history_number','hisno'],req:['request_number'],age:['年齡'],sex:['gender','性別'],hr:['心搏速度'],
+  protocol:['掃描模式'],kvp:['tube voltage'],radiation_dosage_dlp:['coronary cta'],volume:['注射總量'],rate:['injection_rate'],date:['date']};
+// 掃描模式的值 → protocol
+// DLP 欄可能是文字（如「DLP 250 mGy·cm」）：優先取 DLP 後面的數字，否則取第一個數字
+function firstNum(v){const m=/([0-9]+(?:\.[0-9]+)?)/.exec(String(v||''));return m?parseFloat(m[1]):null;}
+function parseDLP(v){v=String(v||'');if(!v.trim())return null;
+  const m=/dlp[^0-9]*([0-9]+(?:\.[0-9]+)?)/i.exec(v)||/([0-9]+(?:\.[0-9]+)?)/.exec(v);return m?parseFloat(m[1]):null;}
+function mapProto(v){
+  v=String(v||'').toLowerCase();
+  if(/flash|high.?pitch/.test(v))return 'highpitch';
+  if(/sequence|sequential|step|prospective|\bseq\b/.test(v))return 'prospective';
+  if(/spiral|helical|retro/.test(v))return 'retrospective';
+  if(/wide|volume/.test(v))return 'wide';
+  return 'auto';
 }
 function importText(t,quiet){
   t=t.replace(/^\ufeff/,'');const delim=detectDelim(t);
@@ -1446,28 +1483,31 @@ function importText(t,quiet){
   const h=rows[0].map(x=>x.trim().toLowerCase());const ix=k=>h.indexOf(k);
   const keepInc=$('#impinc')&&$('#impinc').checked;
   // 找不到的必要欄位
-  const noCol=['height','weight','hr'].filter(k=>ix(k)<0);
-  if(ix('rate')<0&&(ix('ao_hu')<0||ix('lm_hu')<0))noCol.push('rate 或 ao_hu＋lm_hu');
-  let ok=0,bad=0,dup=0,inc=0,seq=0;const why={};const seen=new Set(mem.map(x=>x.ts)),seenK=new Set(mem.map(recKey));
-  rows.slice(1).forEach(r=>{const g=k=>{const i=ix(k);return i<0?'':(r[i]||'').trim();};
-    let pr=g('protocol').toLowerCase();
-    if(pr.startsWith('pro'))pr='prospective';else if(pr.startsWith('ret'))pr='retrospective';
-    else if(pr.startsWith('high')||pr.includes('flash'))pr='highpitch';else if(pr.startsWith('wide'))pr='wide';else pr='auto';
-    const d={id:g('id'),req:g('req'),height:num(g('height')),weight:num(g('weight')),age:num(g('age')||g('年齡')),sex:parseSex(g('sex')||g('性別')),hr:num(g('hr')),hrv:num(g('hrv')),
-      arr:/^(1|y|yes|true)$/i.test(g('arrhythmia')),cs:/^(1|y|yes|true|是)$/i.test(g('calc_stent')),protocol:pr,kvp:num(g('kvp'))||'auto',conc:num(g('conc'))||370,vol:num(g('volume')),rate:num(g('rate')),ao:num(g('ao_hu')),lm:num(g('lm_hu')),
-      noise:num(g('noise')),actual:num(g('actual_grade')),ts:g('ts')||new Date().toISOString()+'-'+(seq++)};
+  const has=k=>ix(k)>=0||(ALIAS[k]||[]).some(a=>ix(a)>=0);
+  const noCol=['height','weight','hr'].filter(k=>!has(k));
+  if(!has('rate')&&(ix('ao_hu')<0||ix('lm_hu')<0))noCol.push('rate 或 ao_hu＋lm_hu');
+  let ok=0,bad=0,dup=0,inc=0,seq=0;const why={},used={};const seen=new Set(mem.map(x=>x.ts)),seenK=new Set(mem.map(recKey));
+  rows.slice(1).forEach(r=>{const raw=k=>{const i=ix(k);return i<0?'':(r[i]||'').trim();};
+    // g：先讀工具欄位，空白時改讀對應的院內欄位，並記下用了哪個
+    const g=k=>{let v=raw(k);if(v!==''||!ALIAS[k])return v;for(const a of ALIAS[k]){v=raw(a);if(v!==''){used[k]=used[k]||new Set();used[k].add(a);return v;}}return '';};
+    const protoRaw=g('protocol'),pr=mapProto(protoRaw);
+    const d={id:g('id'),req:g('req'),height:num(g('height')),weight:num(g('weight')),age:num(g('age')),sex:parseSex(g('sex')),hr:num(g('hr')),hrv:num(g('hrv')),
+      arr:/^(1|y|yes|true)$/i.test(g('arrhythmia')),cs:/^(1|y|yes|true|是)$/i.test(g('calc_stent'))||/支架/.test(protoRaw),protocol:pr,kvp:num(g('kvp'))||'auto',conc:num(g('conc'))||370,vol:num(g('volume')),rate:num(g('rate')),ao:num(g('ao_hu')),lm:num(g('lm_hu')),
+      noise:num(g('noise')),actual:num(g('actual_grade')),date:g('date')||null,ts:g('ts')||new Date().toISOString()+'-'+(seq++)};
+    if(/支架/.test(protoRaw)){used.calc_stent=used.calc_stent||new Set(['掃描模式（含「支架」）']);}
     { // best_phase_pct、best_phase_ms 各一欄；也接受單一 best_phase 欄寫成 75%、350ms
-      d.phasePct=num(g('best_phase_pct'));d.phaseMs=num(g('best_phase_ms'));
+      d.phasePct=num(g('best_phase_pct'));d.phaseMs=num(g('best_phase_ms'));d.dlp=parseDLP(g('radiation_dosage_dlp'));d.cac=firstNum(g('total_calcium_score'));
       const raw=g('best_phase');
       if(raw&&d.phasePct==null&&d.phaseMs==null){const u=(g('best_phase_unit')+' '+raw).toLowerCase();if(/ms/.test(u))d.phaseMs=num(raw);else d.phasePct=num(raw);}}
-    if(g('hr_type'))d.hrType=g('hr_type');
+    if(raw('hr_type'))d.hrType=raw('hr_type');else if(used.hr&&raw('hr')===''&&d.hr!=null)d.hrType='scan';   // 心搏速度＝掃描時心率
     if(seen.has(d.ts)||seenK.has(recKey(d))){dup++;return;}
     if(ready(d)){mem.push(d);seen.add(d.ts);seenK.add(recKey(d));ok++;return;}
     missingOf(d).forEach(m=>why[m]=(why[m]||0)+1);
     if(keepInc){mem.push(d);seen.add(d.ts);seenK.add(recKey(d));inc++;}else bad++;});
   store();renderList();render();
   if(!quiet)$('#msg3').textContent=`匯入 ${ok} 筆${inc?`、不完整但已匯入 ${inc} 筆（列入待補登）`:''}${dup?`，${dup} 筆已存在略過`:''}${bad?`，${bad} 筆不完整略過`:''}。`;
-  return {ok,bad,dup,inc,why,noCol,delim};
+  const map=Object.entries(used).map(([k,v])=>`${k} ← ${[...v].join('/')}`);
+  return {ok,bad,dup,inc,why,noCol,delim,map};
 }
 $('#imp').onclick=()=>{const t=$('#csvin').value.trim();if(t)importText(t);else $('#msg3').textContent='請貼上 CSV 或選擇檔案。';};
 // 讀檔：先試 UTF-8，失敗再試 Big5（Windows Excel 存的 CSV 常為 Big5）
@@ -1494,6 +1534,7 @@ async function importFiles(list){
   <div class="tw"><table><tr><th>檔案</th><th>分隔</th><th>可預測</th><th>不完整</th><th>重複略過</th><th>找不到的欄位</th></tr>
   ${rows.map(r=>`<tr><td>${esc(r.name)}</td><td>${DELIM_NAME[r.delim]||'–'}</td><td>${r.ok}</td><td>${(r.bad||0)+(r.inc||0)}${r.inc?'（已匯入）':''}</td><td>${r.dup}</td><td class="warn">${r.err||(r.noCol&&r.noCol.length?esc(r.noCol.join('、')):'')}</td></tr>`).join('')}
   <tr class="tot"><td>合計</td><td></td><td>${T.ok}</td><td>${T.bad+T.inc}</td><td>${T.dup}</td><td></td></tr></table></div>
+  ${rows.some(r=>r.map&&r.map.length)?`<p class="sub">欄位對應：${[...new Set(rows.flatMap(r=>r.map||[]))].map(esc).join('；')}。</p>`:''}
   ${whyTxt?`<p class="sub">不完整的原因（一筆可能缺多項）：<b>${whyTxt}</b>。</p>`:''}
   ${T.bad?'<p class="hint">預測至少需要身高、體重、心率，以及 HU（ao_hu＋lm_hu）或 injection rate 其中一組。勾選上方「不完整的列也匯入」可先匯入，補齊後再預測。</p>':''}`;
   $('#msg3').textContent='';
