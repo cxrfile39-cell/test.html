@@ -244,12 +244,19 @@ del{color:var(--mute)}
           <label>Aortic root SD (HU)<input name="noise" type="number" step="0.1" inputmode="decimal" placeholder="選填，未填則估算"></label>
           <label>實際品質評分 (1–4)<select name="actual"><option value="">選填</option><option>4</option><option>3</option><option>2</option><option>1</option></select></label>
         </div>
+        <div class="row" style="margin-top:10px">
+          <label>Best phase（% RR interval）<input name="phasePct" type="number" step="0.1" inputmode="decimal" placeholder="選填，如 75"></label>
+          <label>Best phase（ms）<input name="phaseMs" type="number" step="1" inputmode="numeric" placeholder="選填，如 350"></label>
+        </div>
+        <div class="hint">Best phase for reconstruction：可只填 %RR、只填 ms，或兩者都填。</div>
+        <div class="hint" id="phasehint"></div>
       </div>
       <details class="def">
         <summary>量測定義</summary>
         <p><b>Aortic root density</b>：在 LM 開口高度的軸切面，於升主動脈根部放圓形 ROI（約 1–2 cm²，避開管壁、鈣化與 streak artifact），取平均 CT 值 (HU)。</p>
         <p><b>Aortic root SD（影像雜訊）</b>：同一個 ROI 內 CT 值的<b>標準差</b> (HU)，代表 image noise；建議連續 3 層取平均。數值受 kernel、重建法（FBP / IR / DL）與 ROI 大小影響，跨機型比較需注意。</p>
         <p><b>LM density</b>：LM 管腔中央放小 ROI（約 1–2 mm²，不碰管壁與斑塊）的平均 HU。</p>
+        <p><b>Best phase for reconstruction</b>：影像品質最好、用來判讀的重建相位，以 R 波後的 RR 間期百分比（%）、毫秒（ms）或兩者表示；兩者換算：ms = % × RR ÷ 100，RR (ms) = 60000 ÷ 心率。</p>
         <p><b>SNR</b> = Aortic root HU ÷ SD；<b>CNR</b> = (血管 HU − 血管周圍脂肪 HU) ÷ SD。</p>
         <p><b>IDR</b>（碘注射速率, gI/s）= 注射速率 × 濃度 ÷ 1000；<b>總碘量</b> (gI) = 總量 × 濃度 ÷ 1000。</p>
       </details>
@@ -339,7 +346,7 @@ del{color:var(--mute)}
   <div class="card" style="margin-top:14px">
     <h2>批次匯入 CSV</h2>
     <p class="hint">第一列為欄位名稱，欄位：<code>id,req,height,weight,age,sex,hr,hrv,arrhythmia,calc_stent,protocol,kvp,conc,volume,rate,ao_hu,lm_hu,noise,actual_grade</code><br>
-    protocol 可填 prospective / retrospective / highpitch / wide；arrhythmia、calc_stent（鈣化過多或有 STENT）填 1 或 0；conc 為 mgI/mL（空白視為 370）、volume 為 mL、rate 為 mL/s；age、sex（M/F 或 男/女）、hrv、noise、actual_grade 可留空（actual_grade 請用 4 = 最佳、1 = 無法診斷）；protocol、kvp 留空則自動建議；ao_hu / lm_hu 留空時需有 rate。</p>
+    protocol 可填 prospective / retrospective / highpitch / wide；arrhythmia、calc_stent（鈣化過多或有 STENT）填 1 或 0；conc 為 mgI/mL（空白視為 370）、volume 為 mL、rate 為 mL/s；age、sex（M/F 或 男/女）、hrv、noise、actual_grade、best_phase_pct（%RR）、best_phase_ms（ms）可留空（actual_grade 請用 4 = 最佳、1 = 無法診斷）；protocol、kvp 留空則自動建議；ao_hu / lm_hu 留空時需有 rate。</p>
     <label class="drop" id="drop">
       <input type="file" id="file" accept=".csv,text/csv,.txt" multiple>
       <b>點此選擇 CSV 檔（可多選）</b>
@@ -784,6 +791,7 @@ function readForm(){
     hr:num(g('hr')),hrv:num(g('hrv')),arr:F.elements.arr.checked,cs:F.elements.cs.checked,protocol:g('protocol'),
     kvp:g('kvp')==='auto'?'auto':+g('kvp'),conc:num(g('conc')),vol:num(g('vol')),rate:num(g('rate')),
     ao:post?num(g('ao')):null,lm:post?num(g('lm')):null,noise:post?num(g('noise')):null,actual:num(g('actual')),
+    phasePct:post?num(g('phasePct')):null,phaseMs:post?num(g('phaseMs')):null,
     hrType:post?'scan':'rest'};
 }
 const ready=d=>d.height>0&&d.weight>0&&d.hr>0&&((d.ao>0&&d.lm>0)||(d.rate>0&&d.conc>0));
@@ -844,8 +852,32 @@ function recBlock(d,r){
   }
   return h+'</div>';
 }
+// 最佳重建相位：依心率在 %RR 與 ms 之間換算（RR = 60000 ÷ 心率），並標示大約落在收縮期或舒張期
+function phaseInfo(d){
+  const hasP=d.phasePct!=null,hasM=d.phaseMs!=null;if(!hasP&&!hasM)return null;
+  const rr=d.hr>0?60000/d.hr:null;
+  const pct=hasP?d.phasePct:(rr?d.phaseMs/rr*100:null);
+  const ms=hasM?d.phaseMs:(rr?d.phasePct/100*rr:null);
+  return {pct,ms,rr,hasP,hasM,cycle:pct==null?null:pct<50?'收縮期':'舒張期'};
+}
+function phaseHint(d){
+  const el=$('#phasehint');if(!el)return;const P=phaseInfo(d);
+  if(!P){el.textContent='';return;}
+  if(P.pct!=null&&(P.pct<0||P.pct>100)){el.innerHTML='<span class="warn">換算後超出 RR 間期（0–100%），請確認數值與心率。</span>';return;}
+  let t='';
+  if(P.hasP&&P.hasM){
+    t=`已填 ${d.phasePct}% 與 ${d.phaseMs} ms`;
+    if(P.rr){const exp=d.phasePct/100*P.rr,diff=Math.abs(exp-d.phaseMs);
+      t+=diff>Math.max(50,.1*P.rr)?`；<span class="warn">依心率 ${d.hr} bpm 換算，${d.phasePct}% 約為 ${Math.round(exp)} ms，與填入的 ms 不一致，請確認心率或數值</span>`:`，與心率 ${d.hr} bpm 換算一致`;}
+  }else{
+    t=P.hasM?(P.pct!=null?`約 ${P.pct.toFixed(0)}% RR`:'填入心率後可換算成 %RR'):(P.ms!=null?`約 ${Math.round(P.ms)} ms`:'填入心率後可換算成 ms');
+    if(P.rr)t+=`（心率 ${d.hr} bpm，RR ≈ ${Math.round(P.rr)} ms）`;
+  }
+  if(P.cycle)t+=`；大約落在<b>${P.cycle}</b>（以 50% RR 粗分）`;
+  el.innerHTML=t+'。';
+}
 function render(){
-  const d=readForm();injHint(d);
+  const d=readForm();injHint(d);phaseHint(d);
   if(!ready(d)){$('#res').innerHTML='<div class="empty">填入身高、體重、心跳與 injection rate 後即自動計算</div>';renderDB(d,null);return;}
   const r=predict(d),G=GRADE[r.grade];renderDB(d,r);
   $('#res').innerHTML=`
@@ -897,9 +929,9 @@ function setEdit(ts){editTs=ts;$('#save').textContent=ts?'更新此筆紀錄':'�
 function loadRecord(ts){
   const d=mem.find(x=>x.ts===ts);if(!d)return;
   const set=(k,v)=>{F.elements[k].value=v==null?'':v;};
-  ['id','req','height','weight','age','sex','hr','hrv','conc','vol','rate','ao','lm','noise','actual'].forEach(k=>set(k,d[k]));
+  ['id','req','height','weight','age','sex','hr','hrv','conc','vol','rate','ao','lm','noise','actual','phasePct','phaseMs'].forEach(k=>set(k,d[k]));
   set('protocol',d.protocol&&PROTO[d.protocol]?d.protocol:'auto');set('kvp',+d.kvp>0?String(d.kvp):'auto');
-  setMode((d.ao>0&&d.lm>0)||d.hrType==='scan'?'post':'pre');
+  setMode((d.ao>0&&d.lm>0)||d.hrType==='scan'||d.phasePct!=null||d.phaseMs!=null?'post':'pre');
   F.elements.arr.checked=!!d.arr;F.elements.cs.checked=!!d.cs;setEdit(ts);render();
   $('#msg1').textContent='已載入資料庫紀錄，修改後按「更新此筆紀錄」。';
   window.scrollTo({top:0,behavior:'smooth'});
@@ -1359,11 +1391,11 @@ $('#delall').onclick=()=>{
 };
 
 // ------------- CSV
-const COLS=['id','req','height','weight','age','sex','hr','hr_type','hrv','arrhythmia','calc_stent','protocol','kvp','conc','volume','rate','ao_hu','lm_hu','noise','actual_grade','pred_score','pred_grade','idr','ts'];
+const COLS=['id','req','height','weight','age','sex','hr','hr_type','hrv','arrhythmia','calc_stent','protocol','kvp','conc','volume','rate','ao_hu','lm_hu','noise','actual_grade','best_phase_pct','best_phase_ms','pred_score','pred_grade','idr','ts'];
 const q=v=>{v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
 function buildCSV(){
   return [COLS.join(',')].concat(mem.map(d=>{const r=ready(d)?predict(d):null;
-    return [d.id,d.req,d.height,d.weight,d.age,d.sex||'',d.hr,d.hrType||'',d.hrv,d.arr?1:0,d.cs?1:0,d.protocol,d.kvp,d.conc,d.vol,d.rate,d.ao,d.lm,d.noise,d.actual,
+    return [d.id,d.req,d.height,d.weight,d.age,d.sex||'',d.hr,d.hrType||'',d.hrv,d.arr?1:0,d.cs?1:0,d.protocol,d.kvp,d.conc,d.vol,d.rate,d.ao,d.lm,d.noise,d.actual,d.phasePct,d.phaseMs,
       r?r.total:'',r?r.grade:'',r&&r.inj?r.inj.idr.toFixed(2):'',d.ts].map(q).join(',');})).join('\n');
 }
 $('#exp').onclick=async()=>{
@@ -1401,7 +1433,7 @@ function parseCSV(t,delim){
 }
 // 同一受檢者同一次檢查的判斷依據（無 ts 欄的 CSV 也能去重）
 function parseSex(v){v=String(v||'').trim().toUpperCase();if(/^(M|MALE|男|1)$/.test(v))return 'M';if(/^(F|FEMALE|女|2)$/.test(v))return 'F';return null;}
-function recKey(d){return [d.id,d.req,d.height,d.weight,d.age,d.sex,d.cs?1:0,d.hr,d.vol,d.rate,d.ao,d.lm,d.noise,d.actual].map(v=>v==null?'':String(v).trim()).join('|');}
+function recKey(d){return [d.id,d.req,d.height,d.weight,d.age,d.sex,d.cs?1:0,d.hr,d.vol,d.rate,d.ao,d.lm,d.noise,d.actual,d.phasePct,d.phaseMs].map(v=>v==null?'':String(v).trim()).join('|');}
 const DELIM_NAME={',':'逗號',"\t":'Tab',';':'分號'};
 // 列出一筆資料缺了哪些預測必要項目
 function missingOf(d){
@@ -1424,6 +1456,10 @@ function importText(t,quiet){
     const d={id:g('id'),req:g('req'),height:num(g('height')),weight:num(g('weight')),age:num(g('age')||g('年齡')),sex:parseSex(g('sex')||g('性別')),hr:num(g('hr')),hrv:num(g('hrv')),
       arr:/^(1|y|yes|true)$/i.test(g('arrhythmia')),cs:/^(1|y|yes|true|是)$/i.test(g('calc_stent')),protocol:pr,kvp:num(g('kvp'))||'auto',conc:num(g('conc'))||370,vol:num(g('volume')),rate:num(g('rate')),ao:num(g('ao_hu')),lm:num(g('lm_hu')),
       noise:num(g('noise')),actual:num(g('actual_grade')),ts:g('ts')||new Date().toISOString()+'-'+(seq++)};
+    { // best_phase_pct、best_phase_ms 各一欄；也接受單一 best_phase 欄寫成 75%、350ms
+      d.phasePct=num(g('best_phase_pct'));d.phaseMs=num(g('best_phase_ms'));
+      const raw=g('best_phase');
+      if(raw&&d.phasePct==null&&d.phaseMs==null){const u=(g('best_phase_unit')+' '+raw).toLowerCase();if(/ms/.test(u))d.phaseMs=num(raw);else d.phasePct=num(raw);}}
     if(g('hr_type'))d.hrType=g('hr_type');
     if(seen.has(d.ts)||seenK.has(recKey(d))){dup++;return;}
     if(ready(d)){mem.push(d);seen.add(d.ts);seenK.add(recKey(d));ok++;return;}
