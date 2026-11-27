@@ -80,6 +80,9 @@ tr.cur td{background:var(--acc2)}
 .pbar .b{position:relative;height:10px;background:var(--line);border-radius:6px;overflow:hidden;margin-top:4px}
 .pbar .b i{position:absolute;left:0;top:0;bottom:0;border-radius:6px}
 .pbar .ms{display:flex;justify-content:space-between;font-size:11px;color:var(--mute);margin-top:2px}
+.vsl{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;font-size:13px;color:var(--mute);margin-top:8px}
+.vsl .chk{margin-top:0}
+.mp{display:inline-block;font-size:12px;font-weight:600;border-radius:5px;padding:0 7px;background:var(--acc2);color:var(--acc)}
 .disc{border:2px solid var(--g2);background:var(--card);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:14px}
 .disc b{color:var(--g2)}
 details.calc{margin-top:12px;border:1px solid var(--line);border-radius:8px;padding:8px 12px}
@@ -249,8 +252,19 @@ del{color:var(--mute)}
           <label>Best phase（% RR interval）<input name="phasePct" type="number" step="0.1" inputmode="decimal" placeholder="選填，如 75"></label>
           <label>Best phase（ms）<input name="phaseMs" type="number" step="1" inputmode="numeric" placeholder="選填，如 350"></label>
         </div>
-        <div class="hint">Best phase for reconstruction：可只填 %RR、只填 ms，或兩者都填。</div>
+        <div class="hint">Best phase for reconstruction（主要相位：判讀時用得最多的相位）：可只填 %RR、只填 ms，或兩者都填。</div>
         <div class="hint" id="phasehint"></div>
+        <div class="row" style="margin-top:10px">
+          <label>第二相位（% RR interval）<input name="phase2Pct" type="number" step="0.1" inputmode="decimal" placeholder="選填，如 40"></label>
+          <label>第二相位（ms）<input name="phase2Ms" type="number" step="1" inputmode="numeric" placeholder="選填"></label>
+        </div>
+        <div class="vsl">第二相位用於：
+          <label class="chk"><input type="checkbox" name="p2v" value="LM"> LM</label>
+          <label class="chk"><input type="checkbox" name="p2v" value="LAD"> LAD</label>
+          <label class="chk"><input type="checkbox" name="p2v" value="LCX"> LCX</label>
+          <label class="chk"><input type="checkbox" name="p2v" value="RCA"> RCA</label>
+        </div>
+        <div class="hint" id="phase2hint"></div>
         <div class="row" style="margin-top:10px">
           <label>Radiation dosage DLP (mGy·cm)<input name="dlp" type="number" step="0.1" inputmode="decimal" placeholder="選填"></label>
           <label>Total calcium score (Agatston)<input name="cac" type="number" step="0.1" min="0" inputmode="decimal" placeholder="選填"></label>
@@ -354,7 +368,7 @@ del{color:var(--mute)}
   <div class="card" style="margin-top:14px">
     <h2>批次匯入 CSV／Excel</h2>
     <p class="hint">第一列為欄位名稱，欄位：<code>id,req,height,weight,age,sex,hr,hrv,arrhythmia,calc_stent,protocol,kvp,conc,volume,rate,ao_hu,lm_hu,noise,actual_grade</code><br>
-    protocol 可填 prospective / retrospective / highpitch / wide；arrhythmia、calcium_heavy（鈣化分數過多；total_calcium_score > 400 時自動視為 1）、stent（有 STENT）填 1 或 0；conc 為 mgI/mL（空白視為 370）、volume 為 mL、rate 為 mL/s；age、sex（M/F 或 男/女）、hrv、noise、actual_grade、best_phase_pct（%RR）、best_phase_ms（ms）、radiation_dosage_dlp（mGy·cm；也讀「Coronary CTA」欄）、total_calcium_score（Agatston）可留空（actual_grade 請用 4 = 最佳、1 = 無法診斷）；protocol、kvp 留空則自動建議；ao_hu / lm_hu 留空時需有 rate。</p>
+    protocol 可填 prospective / retrospective / highpitch / wide；arrhythmia、calcium_heavy（鈣化分數過多；total_calcium_score > 400 時自動視為 1）、stent（有 STENT）填 1 或 0；conc 為 mgI/mL（空白視為 370）、volume 為 mL、rate 為 mL/s；age、sex（M/F 或 男/女）、hrv、noise、actual_grade、best_phase_pct（%RR）、best_phase_ms（ms）、best_phase2_pct、best_phase2_ms（第二相位）、phase2_vessel（如 RCA 或 LAD;RCA）、radiation_dosage_dlp（mGy·cm；也讀「Coronary CTA」欄）、total_calcium_score（Agatston）可留空（actual_grade 請用 4 = 最佳、1 = 無法診斷）；protocol、kvp 留空則自動建議；ao_hu / lm_hu 留空時需有 rate。</p>
     <label class="drop" id="drop">
       <input type="file" id="file" accept=".csv,text/csv,.txt,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple>
       <b>點此選擇 CSV 或 Excel（.xlsx）檔（可多選）</b>
@@ -805,7 +819,8 @@ function readForm(){
     hr:num(g('hr')),hrv:num(g('hrv')),arr:F.elements.arr.checked,calc:F.elements.calc.checked,stent:F.elements.stent.checked,protocol:g('protocol'),
     kvp:g('kvp')==='auto'?'auto':+g('kvp'),conc:num(g('conc')),vol:num(g('vol')),rate:num(g('rate')),
     ao:post?num(g('ao')):null,lm:post?num(g('lm')):null,noise:post?num(g('noise')):null,actual:num(g('actual')),
-    phasePct:post?num(g('phasePct')):null,phaseMs:post?num(g('phaseMs')):null,dlp:post?num(g('dlp')):null,cac:post?num(g('cac')):null,
+    phasePct:post?num(g('phasePct')):null,phaseMs:post?num(g('phaseMs')):null,
+    phase2Pct:post?num(g('phase2Pct')):null,phase2Ms:post?num(g('phase2Ms')):null,phase2Vessel:post?[...F.querySelectorAll('input[name="p2v"]:checked')].map(x=>x.value):[],dlp:post?num(g('dlp')):null,cac:post?num(g('cac')):null,
     hrType:post?'scan':'rest'};
 }
 const ready=d=>d.height>0&&d.weight>0&&d.hr>0&&((d.ao>0&&d.lm>0)||(d.rate>0&&d.conc>0));
@@ -867,16 +882,21 @@ function recBlock(d,r){
   return h+'</div>';
 }
 // 最佳重建相位：依心率在 %RR 與 ms 之間換算（RR = 60000 ÷ 心率），並標示大約落在收縮期或舒張期
-function phaseInfo(d){
+// 多相位重建：有填第二相位就算
+const isMulti=d=>d.phase2Pct!=null||d.phase2Ms!=null;
+const VESSELS=['LM','LAD','LCX','RCA'];
+function phaseInfo(d,second){
+  d={hr:d.hr,phasePct:second?d.phase2Pct:d.phasePct,phaseMs:second?d.phase2Ms:d.phaseMs};
   const hasP=d.phasePct!=null,hasM=d.phaseMs!=null;if(!hasP&&!hasM)return null;
   const rr=d.hr>0?60000/d.hr:null;
   const pct=hasP?d.phasePct:(rr?d.phaseMs/rr*100:null);
   const ms=hasM?d.phaseMs:(rr?d.phasePct/100*rr:null);
   return {pct,ms,rr,hasP,hasM,cycle:pct==null?null:pct<50?'收縮期':'舒張期'};
 }
-function phaseHint(d){
-  const el=$('#phasehint');if(!el)return;const P=phaseInfo(d);
-  if(!P){el.textContent='';return;}
+function phaseHint(d,second){
+  const el=$(second?'#phase2hint':'#phasehint');if(!el)return;const P=phaseInfo(d,second);
+  if(!P){el.innerHTML=second&&d.phase2Vessel&&d.phase2Vessel.length?'<span class="warn">已勾選血管，但尚未填第二相位。</span>':'';return;}
+  const vs=d.phase2Vessel||[];if(second)d={...d,phasePct:d.phase2Pct,phaseMs:d.phase2Ms};
   if(P.pct!=null&&(P.pct<0||P.pct>100)){el.innerHTML='<span class="warn">換算後超出 RR 間期（0–100%），請確認數值與心率。</span>';return;}
   let t='';
   if(P.hasP&&P.hasM){
@@ -888,6 +908,7 @@ function phaseHint(d){
     if(P.rr)t+=`（心率 ${d.hr} bpm，RR ≈ ${Math.round(P.rr)} ms）`;
   }
   if(P.cycle)t+=`；大約落在<b>${P.cycle}</b>（以 50% RR 粗分）`;
+  if(second)t=`<span class="mp">多相位重建</span> 第二相位${vs.length?`用於 ${vs.join('、')}`:'（未勾選血管）'}：`+t;
   el.innerHTML=t+'。';
 }
 // 有效劑量估算：E ≈ DLP × k，胸部 k = 0.014 mSv/(mGy·cm)（冠狀動脈 CTA 研究常用）
@@ -899,7 +920,7 @@ function cacGrade(v){return v==null?null:v===0?'無鈣化':v<=10?'極輕微':v<=
 function cacHint(d){const el=$('#cachint');if(!el)return;
   el.innerHTML=d.cac!=null&&d.cac>=0?`鈣化分數 ${d.cac}：<b>${cacGrade(d.cac)}</b>（0｜1–10｜11–100｜101–400｜>400）。${d.cac>CAC_HEAVY?(hasCalc(d)?(calcAuto?' 已自動勾選上方「鈣化分數過多」。':''):' 已取消「鈣化分數過多」勾選（手動）。'):''}`:'';}
 function render(){
-  const d=readForm();injHint(d);phaseHint(d);dlpHint(d);cacHint(d);
+  const d=readForm();injHint(d);phaseHint(d);phaseHint(d,true);dlpHint(d);cacHint(d);
   if(!ready(d)){$('#res').innerHTML='<div class="empty">填入身高、體重、心跳與 injection rate 後即自動計算</div>';renderDB(d,null);return;}
   const r=predict(d),G=GRADE[r.grade];renderDB(d,r);
   $('#res').innerHTML=`
@@ -960,9 +981,10 @@ function setEdit(ts){editTs=ts;$('#save').textContent=ts?'更新此筆紀錄':'�
 function loadRecord(ts){
   const d=mem.find(x=>x.ts===ts);if(!d)return;
   const set=(k,v)=>{F.elements[k].value=v==null?'':v;};
-  ['id','req','height','weight','age','sex','hr','hrv','conc','vol','rate','ao','lm','noise','actual','phasePct','phaseMs','dlp','cac'].forEach(k=>set(k,d[k]));
+  ['id','req','height','weight','age','sex','hr','hrv','conc','vol','rate','ao','lm','noise','actual','phasePct','phaseMs','phase2Pct','phase2Ms','dlp','cac'].forEach(k=>set(k,d[k]));
+  F.querySelectorAll('input[name="p2v"]').forEach(x=>{x.checked=(d.phase2Vessel||[]).includes(x.value);});
   set('protocol',d.protocol&&PROTO[d.protocol]?d.protocol:'auto');set('kvp',+d.kvp>0?String(d.kvp):'auto');
-  setMode((d.ao>0&&d.lm>0)||d.hrType==='scan'||d.phasePct!=null||d.phaseMs!=null||d.dlp!=null||d.cac!=null?'post':'pre');
+  setMode((d.ao>0&&d.lm>0)||d.hrType==='scan'||d.phasePct!=null||d.phaseMs!=null||isMulti(d)||d.dlp!=null||d.cac!=null?'post':'pre');
   calcAuto=false;calcManual=false;F.elements.arr.checked=!!d.arr;F.elements.calc.checked=hasCalc(d);F.elements.stent.checked=hasStent(d);setEdit(ts);render();
   $('#msg1').textContent='已載入資料庫紀錄，修改後按「更新此筆紀錄」。';
   window.scrollTo({top:0,behavior:'smooth'});
@@ -1427,11 +1449,11 @@ $('#delall').onclick=()=>{
 };
 
 // ------------- CSV
-const COLS=['id','req','height','weight','age','sex','hr','hr_type','hrv','arrhythmia','calcium_heavy','stent','calc_stent','protocol','kvp','conc','volume','rate','ao_hu','lm_hu','noise','actual_grade','best_phase_pct','best_phase_ms','radiation_dosage_dlp','total_calcium_score','date','pred_score','pred_grade','idr','ts'];
+const COLS=['id','req','height','weight','age','sex','hr','hr_type','hrv','arrhythmia','calcium_heavy','stent','calc_stent','protocol','kvp','conc','volume','rate','ao_hu','lm_hu','noise','actual_grade','best_phase_pct','best_phase_ms','best_phase2_pct','best_phase2_ms','phase2_vessel','radiation_dosage_dlp','total_calcium_score','date','pred_score','pred_grade','idr','ts'];
 const q=v=>{v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
 function buildCSV(){
   return [COLS.join(',')].concat(mem.map(d=>{const r=ready(d)?predict(d):null;
-    return [d.id,d.req,d.height,d.weight,d.age,d.sex||'',d.hr,d.hrType||'',d.hrv,d.arr?1:0,hasCalc(d)?1:0,hasStent(d)?1:0,csOf(d)?1:0,d.protocol,d.kvp,d.conc,d.vol,d.rate,d.ao,d.lm,d.noise,d.actual,d.phasePct,d.phaseMs,d.dlp,d.cac,d.date||'',
+    return [d.id,d.req,d.height,d.weight,d.age,d.sex||'',d.hr,d.hrType||'',d.hrv,d.arr?1:0,hasCalc(d)?1:0,hasStent(d)?1:0,csOf(d)?1:0,d.protocol,d.kvp,d.conc,d.vol,d.rate,d.ao,d.lm,d.noise,d.actual,d.phasePct,d.phaseMs,d.phase2Pct,d.phase2Ms,(d.phase2Vessel||[]).join(';'),d.dlp,d.cac,d.date||'',
       r?r.total:'',r?r.grade:'',r&&r.inj?r.inj.idr.toFixed(2):'',d.ts].map(q).join(',');})).join('\n');
 }
 $('#exp').onclick=async()=>{
@@ -1469,7 +1491,7 @@ function parseCSV(t,delim){
 }
 // 同一受檢者同一次檢查的判斷依據（無 ts 欄的 CSV 也能去重）
 function parseSex(v){v=String(v||'').trim().toUpperCase();if(/^(M|MALE|男|1)$/.test(v))return 'M';if(/^(F|FEMALE|女|2)$/.test(v))return 'F';return null;}
-function recKey(d){return [d.id,d.req,d.height,d.weight,d.age,d.sex,hasCalc(d)?1:0,hasStent(d)?1:0,d.hr,d.vol,d.rate,d.ao,d.lm,d.noise,d.actual,d.phasePct,d.phaseMs,d.dlp,d.cac].map(v=>v==null?'':String(v).trim()).join('|');}
+function recKey(d){return [d.id,d.req,d.height,d.weight,d.age,d.sex,hasCalc(d)?1:0,hasStent(d)?1:0,d.hr,d.vol,d.rate,d.ao,d.lm,d.noise,d.actual,d.phasePct,d.phaseMs,d.phase2Pct,d.phase2Ms,(d.phase2Vessel||[]).join(';'),d.dlp,d.cac].map(v=>v==null?'':String(v).trim()).join('|');}
 const DELIM_NAME={',':'逗號',"\t":'Tab',';':'分號'};
 // 列出一筆資料缺了哪些預測必要項目
 function missingOf(d){
@@ -1518,7 +1540,9 @@ function importText(t,quiet){
       noise:num(g('noise')),actual:num(g('actual_grade')),date:g('date')||null,ts:g('ts')||new Date().toISOString()+'-'+(seq++)};
     if(/支架/.test(protoRaw)){used.stent=used.stent||new Set();used.stent.add('掃描模式（含「支架」）');}
     { // best_phase_pct、best_phase_ms 各一欄；也接受單一 best_phase 欄寫成 75%、350ms
-      d.phasePct=num(g('best_phase_pct'));d.phaseMs=num(g('best_phase_ms'));d.dlp=parseDLP(g('radiation_dosage_dlp'));d.cac=firstNum(g('total_calcium_score'));
+      d.phasePct=num(g('best_phase_pct'));d.phaseMs=num(g('best_phase_ms'));
+      d.phase2Pct=num(g('best_phase2_pct'));d.phase2Ms=num(g('best_phase2_ms'));
+      d.phase2Vessel=VESSELS.filter(v=>String(g('phase2_vessel')).toUpperCase().split(/[^A-Z]+/).includes(v));d.dlp=parseDLP(g('radiation_dosage_dlp'));d.cac=firstNum(g('total_calcium_score'));
       if(d.cac!=null&&d.cac>CAC_HEAVY&&!d.calc){d.calc=true;used.calcium_heavy=used.calcium_heavy||new Set();used.calcium_heavy.add(`total_calcium_score > ${CAC_HEAVY}`);}
       const raw=g('best_phase');
       if(raw&&d.phasePct==null&&d.phaseMs==null){const u=(g('best_phase_unit')+' '+raw).toLowerCase();if(/ms/.test(u))d.phaseMs=num(raw);else d.phasePct=num(raw);}}
